@@ -1,0 +1,18 @@
+{
+  "name": "barunson-admin",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "바른라운지 업체 관리자 (바른손카드) — 판매현황·쿠폰 사용처리·정산 콘솔",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.7"
+  }
+}

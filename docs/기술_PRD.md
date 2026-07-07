@@ -1,0 +1,200 @@
+# 바른라운지 업체 관리자 — 기술 PRD
+
+- **제품명:** 바른라운지 업체 관리자 (Partner Admin)
+- **운영사:** (주)바른손카드
+- **서비스:** 바른라운지 (뷰티/클리닉 소셜커머스)
+- **문서 버전:** v0.1 (초안)
+- **기준일:** 2026-07-01
+- **작성 범위:** 본 어드민(운영자·업체용 콘솔). 소비자 스토어프론트/결제는 바른손카드 본사이트가 담당.
+
+> ⚠️ **미확정(TBD):** 목표 기술 스택은 사내 레포 `barunntechnicaloffice/donald-duck`와 정렬 예정이나 현재 접근 불가로 미확정. §6.2 참고.
+
+---
+
+## 1. 개요 / 목적
+
+바른손카드가 판매하는 소셜커머스 상품(일반 쿠폰·금액형 자유이용권)의 **입점 업체 운영**과 **바른손카드 내부 운영**을 위한 웹 어드민.
+
+- 업체: 자사 판매현황 확인, 고객 쿠폰 사용처리·차감, 정산 확인, 계좌/세금계산서 등록, 문의.
+- 바른손카드 직원: 전체 매출/사용률/정산 모니터링, 업체 권한 승인, 공지 발행.
+- 핵심 연결: **회원 계정 ↔ 업체(가맹점) 판매분 매핑**(권한 승인)과 **사용 기준 정산**.
+
+## 2. 사용자 · 역할 (Roles)
+
+| 역할 | 인증 | 접근 |
+|------|------|------|
+| **업체 (vendor)** | 이메일 회원가입/로그인 | 판매현황·쿠폰 사용처리·정산·명세서·문자이력·업체정보·권한·문의·약관 |
+| **바른손카드 직원 (staff)** | Google 로그인(내부) | 운영 대시보드·직원 콘솔(권한 승인/공지)·약관 |
+
+- **권한 게이팅:** 업체는 `vendorAccess`가 `granted`가 되기 전까지 운영 메뉴(판매현황·사용처리·문자이력·정산·명세서) 잠금.
+- **역할 게이팅:** 메뉴는 `data-role`로 역할별 노출. 직원 전용 화면(운영 대시보드·직원 콘솔)은 vendor 접근 차단.
+
+## 3. 기능 요구사항
+
+### F-01 인증/계정
+- 이메일 회원가입: 이름(담당자), 이메일, **비밀번호(8자 이상 + 특수문자)+확인**, 연락처, **사업자등록번호**, **사업자등록증 첨부**.
+- 이메일 로그인, **Google 로그인(직원 전용, role=staff)**, 세션 유지(재방문 자동 로그인), 로그아웃.
+
+### F-02 업체 권한(가맹점 연동)
+- 업체: 사업자 정보 제출 → `pending` → 직원 승인 시 `granted`.
+- 직원: 직원 콘솔에서 업체 목록·신청 검토 → **승인/반려**.
+- 승인 지점이 **회원↔가맹점(MID) 매핑**의 확정점(연동 시 MID 연결).
+
+### F-03 판매현황 (업체)
+- 집계 KPI: 누적 판매, 사용 완료, 오늘 사용처리, 확정 매출.
+- **상품별 판매 요약**(집계, 개인정보 미포함).
+- **사용 내역 목록** — 사용(사용처리·차감)된 건만. **미사용 쿠폰의 고객 PII는 노출 금지**(§8).
+
+### F-04 쿠폰 사용처리 (업체)
+- 조회: 쿠폰번호 / 연락처(끝 4자리) / 이름 / 통합.
+- **일반 쿠폰:** 1회 사용처리(판매가 전액).
+- **금액형 자유이용권:** 사용액 입력 후 **차감**(잔액·차감 내역 표시, 잔액 0이면 소멸).
+- **다회권(횟수형):** 사용 회수 입력(기본 1회, 다인 동반 시 복수 회차) 후 **차감**(잔여 회수·회차 내역 표시, 잔여 0이면 소멸).
+- **처리 지점 선택(다지점):** 쿠폰은 전 지점 사용 가능. 사용처리·차감 시 처리 지점이 기록되며 정산 귀속 기준이 됨(§5.2). 정식 연동 시 지점 계정별로 자동 지정.
+- 사용/차감 즉시 **고객 알림 문자 발송**(F-06, 서명 = 브랜드+처리 지점).
+
+### F-05 정산 (업체) — §5.1·§5.2
+- 사용 기준 정산, **익월 25일** 지급. 다음 정산 예정액/사용월/건수, 정산 내역(라인별·사용 지점 표시).
+- **정산주체별 지급 요약:** 직영점 사용분 = 본사 합산, 가맹점 사용분 = 각 가맹점 개별.
+
+### F-06 알림 문자(SMS)
+- 사용처리·차감·잔액소진 시 고객 연락처로 자동 발송.
+- **알림 문자 이력**(일시/연락처/구분/내용).
+
+### F-07 정산 명세서 (업체)
+- 지급 단위 = **지급일 × 정산주체(사업자)** — 직영 합산 1건 + 가맹점별 각 1건. 정산 합계, 상태(지급완료/예정), **명세서 CSV 다운로드**(사용 지점 포함), 세금계산서(정산주체별 발행 연동 예정).
+
+### F-08 업체·정산 정보 (업체)
+- 정산 계좌(은행/계좌/예금주), 세금계산서 정보(상호/대표자/사업자번호/업태/종목/주소/이메일), 담당자 연락처.
+
+### F-09 공지사항
+- 직원: 등록/삭제(상단 고정). 업체: 열람.
+
+### F-10 1:1 문의
+- 유형/연락처/제목/내용 → **mailto**(현) → 담당자(jungmin.kim@barunn.net). 연동 시 서버 접수.
+
+### F-11 운영 대시보드 (직원) — §5
+- 총 매출액, 총 정산액, **평균 쿠폰 사용률**, 입점 업체 수.
+- **업체별 현황**: 매출/발급/사용/사용률/정산액.
+
+### F-12 약관·정산 안내
+- 한 페이지 탭: 정산 방법 / 쿠폰 이용약관 / 환불·청약철회 / 입점·운영 약관.
+
+## 4. 데이터 모델 (현행 타입 기준)
+
+```ts
+CouponType = 'service' | 'amount' | 'count' // 일반 쿠폰 | 자유이용권(금액형) | 다회권(횟수형)
+CouponStatus = 'available' | 'used' | 'refunded'
+BranchKind = 'direct' | 'franchise'        // 직영 | 가맹
+Branch { id, name, kind, payee }           // payee = 정산주체(사업자) — 직영은 본사 공통
+Coupon { code, type, product, name, phone, buyDate, expire, paid,
+         origin?, face?, used?, status, usedAt?, usedBy?,
+         branchId?, usedBranchId?, history?: UsageEntry[] } // branchId=구매 지점, usedBranchId=사용처리 지점
+UsageEntry { date, amount, branchId? }     // branchId = 차감 처리 지점(정산 귀속)
+
+Role = 'vendor' | 'staff'
+VendorAccess = 'none' | 'pending' | 'granted'
+User { email, name, provider('email'|'google'), role, pw?, phone?, bizNo?, certName?,
+       vendorAccess, vendorName?, request?: AccessRequest, profile?: VendorProfile }
+AccessRequest { vendorName, bizNo, manager, phone, at }
+VendorProfile { bank, account, holder, company, ceo, addr, bizType, bizItem, taxEmail, phone }
+
+SmsEntry { at, phone, message, kind('redeem'|'deduct'|'used-up') }
+Notice { id, title, date, body, pinned? }
+OpsVendorStat { vendor, region, revenue, issued, used, settle }
+SettleLine { code, product, type, usedAt, usedAmount, settle, payout, branchId }  // 정산 산출 결과
+PayeeGroup { payee, kind, branchNames, count, total }  // 정산주체별 합산 (domain.groupByPayee)
+```
+
+## 5. 핵심 로직 스펙
+
+### 5.1 정산 (사용 기준 · 익월 25일)
+- **기준:** 매월 1일~말일에 **사용(사용처리·차감)**된 금액을 **익월 25일**에 등록 계좌로 지급(`PAYOUT_DAY=25`). 휴일이면 직전 영업일.
+- **정산액**
+  - 일반 쿠폰: 사용처리 시 **판매가(paid) 전액**.
+  - 금액형: 차감할 때마다 **차감 액면 × (결제액 ÷ 액면)**. (예: 결제 20만/액면 100만 → 비율 20%. 30만 차감 → 6만 정산)
+  - 다회권(횟수형, `face`=총 회수·`used`=사용 회수): **사용 회수 × 회당 균등 단가(결제액 ÷ 총 회수)**. **완주 시 마지막 회차에서 끝수 보정**(정산 누계 = 결제액 — 회당 반올림 오차 방지). (예: 3회권 10만원 → 33,333 + 33,333 + 33,334)
+- **미사용분은 정산하지 않음**(쓴 만큼만) → 환불로 인한 **업체 역정산(환수) 없음**.
+- 산출 함수: `domain.settleLines(coupons)`, 지급일 `domain.payoutDate(usedAt)`.
+
+### 5.2 다지점(직영·가맹) 정산
+- **전제:** 전 지점 동일 상품·동일가 → 쿠폰은 구매 지점과 관계없이 **전 지점 사용 가능**. 구매 시 대표 지점(`branchId`) 기록.
+- **귀속 규칙:** 정산 라인은 **사용처리한 지점**(`usedBranchId` / `history[].branchId`)에 귀속. 구매 지점 아님.
+- **지급:** 지점 → 정산주체(payee) 매핑. 직영점 사용분은 **본사 계좌로 합산 지급**, 가맹점 사용분은 **각 가맹점 계좌로 개별 지급**(플랫폼 직접 지급 — 본사 경유 재분배 없음). 세금계산서도 사업자별 발행.
+- 산출 함수: `domain.groupByPayee(settleLines)`. 지점 데이터: `config.BRANCHES`, `config.branchOf(id)`.
+
+### 5.3 환불 정책 (컴플라이언트) — 결제액 기준
+| 상황 | 환불 |
+|------|------|
+| 구매 후 7일 이내 · 미사용 | **100%** (청약철회, 전자상거래법 강행규정) |
+| 7일 경과 ~ 유효기간 내 · 미사용 | **100%** (최소 90%) |
+| 유효기간 경과 ~ 소멸시효(5년) · 미사용 | **90%** (신유형 상품권 표준약관) |
+| 금액형 부분사용 | 잔액 **결제액 비례**(사용액 60%·1만원 이하 80% 이상 시) |
+| 다회권 부분사용 | 잔여 회수 **결제액 비례** = 결제액 × (잔여회수 ÷ 총회수). 기간 경과 시 90%. 계속거래(방판법 §31) 해당 시 중도해지 환불 — 위약금 기준 법무 검토 중 |
+| 업체 귀책(폐업·불이행) | **100%** |
+
+### 5.4 상태/표시
+- `realStatus`: refunded → (금액형 잔액0 → used) → used → 만료 → available.
+- `balanceOf`(금액형 잔액), `discPct`(일반 쿠폰 할인율).
+
+## 6. 아키텍처 · 기술 스택
+
+### 6.1 현행(프로토타입)
+- **Vite + TypeScript (바닐라)** + 자체 CSS(디자인 토큰). 정적 SPA.
+- 모듈: `index.html`(마크업) · `src/style.css` · `src/types.ts` · `src/config.ts` · `src/domain.ts`(순수 로직) · `src/api.ts`·`src/auth.ts`(**데이터/인증 연동 계층, 현재 localStorage 목**) · `src/main.ts`(UI).
+- 빌드: `npm run dev`(HMR) / `npm run build`(dist 정적 번들).
+
+### 6.2 목표 스택 (TBD — donald-duck 정렬 필요)
+- 아래 항목을 `barunntechnicaloffice/donald-duck`와 맞춰 확정:
+  - 프레임워크(Next.js / React+Vite / 기타), 언어(TS), 스타일링(Tailwind / CSS-in-JS / …), 패키지매니저(npm/pnpm/yarn), 린트·포맷(ESLint/Prettier), 폴더 구조·라우팅·상태관리, 테스트.
+- **정렬 방법:** donald-duck의 `package.json`/설정/폴더 구조 확보 → 현행 로직(§5, `domain.ts`)과 데이터 계층(`api.ts`/`auth.ts`)을 목표 스택 구조로 이관.
+
+### 6.3 연동 계층(Seam) — 목 → 실제 API 매핑
+| 현행(목) | 실제 연동 |
+|----------|-----------|
+| `api.listCoupons()` | `GET /api/coupons` (바른손 주문·쿠폰 동기화) |
+| `api.redeem(code)` / `deduct(code,amount)` | `POST /api/coupons/{code}/redeem` · `/deduct` |
+| `api.sendSms(phone,msg,kind)` | SMS 게이트웨이(알리고/NHN/Twilio) 또는 `POST /api/sms` |
+| `api.getOpsStats()` | `GET /api/ops/stats` |
+| `api.listNotices/addNotice/deleteNotice` | `GET/POST/DELETE /api/notices` |
+| `api.sendInquiry()` | `POST /api/inquiries` (현 mailto) |
+| `auth.signup/login/loginWithGoogle` | `POST /api/auth/*` (세션/JWT), Google ID 토큰 서버 검증 |
+| `auth.requestVendorAccess/approveVendor` | `POST /api/vendor-access` (+ MID 매핑) |
+| `auth.updateProfile` | `PUT /api/vendor/profile` |
+| 정산 산출/명세 | `GET /api/settlement?period=` (`domain.settleLines` 로직 서버 이전) |
+
+## 7. 외부 연동
+
+- **인증:** Google OAuth 2.0(`GOOGLE_CLIENT_ID` 필요, 직원용) + 이메일/비밀번호.
+- **SMS:** 문자 게이트웨이 연동(발송 결과·실패 처리·발송이력 저장).
+- **정산/지급:** 바른손카드 결제원장 동기화 → 정산 산출(어드민) → **지급 실행**은 (A)바른손 대행 or (B)펌뱅킹 직접 — 결정 필요(§10).
+- **세금계산서:** 국세청 연동 또는 바른손 발행 대행.
+
+## 8. 보안 · 개인정보 (PIPA)
+
+- **PII 최소 노출:** 사용 전 쿠폰의 고객 이름·연락처는 어드민에 노출 금지. 고객 정보는 **사용 시점(쿠폰 제시·조회)**에만 표시. (`main.transacted()` 게이트)
+- 연락처 마스킹(목록), 역할 기반 접근 제어, 비밀번호 정책(8+특수문자, 서버는 해시 저장).
+- 사업자등록증 등 파일은 서버 스토리지 업로드(현재 파일명만 목 저장).
+- 개인정보 제3자 제공: 쿠폰 사용처리 목적의 최소 정보만 업체 제공.
+
+## 9. 비기능 요구사항
+
+- **배포:** 정적 번들(현) → 목표 스택에 맞춘 호스팅. 바른손 본사이트와 SSO/도메인 정책 정렬.
+- 반응형(모바일 매장 사용 고려), 접근성(reduced-motion), 브라우저 최신 2버전.
+- 기준일: 현재 `BASE_DATE` 고정(데모) → 연동 시 실시간(`new Date()`).
+
+## 10. 미해결 결정 (Open Questions)
+
+1. **목표 기술 스택** — donald-duck과 정렬(프레임워크/언어/스타일/패키지매니저/린트). *레포 접근 필요.*
+2. **정산 지급 주체** — (A) 바른손카드가 이체 대행 vs (B) 운영사 직접 지급(펌뱅킹).
+3. **정산 연동 인터페이스** — REST API / 배치 파일(EDI·전문) / 공용 DB.
+4. **결제 데이터 원본** — 주문·취소·환불을 바른손 결제 시스템에서 수신하는 구조 확정.
+5. **Google OAuth Client ID** 발급/도메인 등록.
+6. **SMS 게이트웨이** 선정 및 발신번호 사전등록.
+7. **세금계산서** 발행 주체/연동.
+
+## 11. 참고 — 현행 구현 산출물
+
+- 리포 루트 `index.html` + `src/*`, 데모 계정 `demo@barunn.net` / `barun@1234`(업체), 직원=Google 데모.
+- 화면 스크린샷: `screenshots/*.png`.
+- 정산·환불·역할·정산연동 관련 결정 이력은 대화 및 본 문서 기준.

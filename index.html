@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>바른라운지 — 업체 관리자</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Serif+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+
+<!-- ============ AUTH (로그인 / 회원가입) ============ -->
+<div id="authView">
+  <div class="appbar"><span class="logo">바른라운지</span><span class="tag">Partner</span></div>
+  <div class="login-wrap">
+    <div class="login">
+      <h1>바른라운지 업체 관리자</h1>
+      <p class="sub">바른손카드 · 업체 정산/운영 콘솔</p>
+
+      <div class="tabs" id="authTabs" style="margin:0 auto var(--sp-5);justify-content:center">
+        <button class="tab on" data-auth="login">로그인</button>
+        <button class="tab" data-auth="signup">회원가입</button>
+      </div>
+
+      <form id="authForm">
+        <div class="field" id="nameField" style="display:none">
+          <label for="auName">이름 / 담당자명</label>
+          <input id="auName" type="text" placeholder="예: 홍길동" autocomplete="name" />
+        </div>
+        <div class="field">
+          <label for="auEmail">이메일</label>
+          <input id="auEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="field">
+          <label for="auPw">비밀번호</label>
+          <input id="auPw" type="password" placeholder="8자 이상, 특수문자 포함" autocomplete="current-password" />
+        </div>
+        <div id="signupExtra" style="display:none">
+          <div class="field">
+            <label for="auPw2">비밀번호 확인</label>
+            <input id="auPw2" type="password" placeholder="비밀번호 재입력" autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label for="auPhone">연락처</label>
+            <input id="auPhone" type="text" placeholder="010-0000-0000" autocomplete="tel" />
+          </div>
+          <div class="field">
+            <label for="auBiz">사업자등록번호</label>
+            <input id="auBiz" type="text" placeholder="000-00-00000" />
+          </div>
+          <div class="field">
+            <label for="auCert">사업자등록증 첨부</label>
+            <input id="auCert" type="file" accept="image/*,.pdf" />
+            <div class="help">이미지 또는 PDF 파일</div>
+          </div>
+        </div>
+        <button class="btn-primary" type="submit" id="authSubmit">로그인</button>
+      </form>
+
+      <div class="divider"><span>바른손카드 직원</span></div>
+      <div id="googleBtn"></div>
+      <button class="btn-google" id="googleDemoBtn"><span class="g">G</span> 직원 Google 로그인</button>
+
+      <p class="hint" id="authHint"><b>업체</b>는 회원가입 후 메뉴에서 업체 권한을 요청해 판매분과 연동하세요.<br><b>바른손카드 직원</b>은 Google 계정으로 로그인합니다.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ADMIN ============ -->
+<div id="adminView" style="display:none">
+  <div class="appbar">
+    <span class="logo">바른라운지</span>
+    <span class="tag">Partner</span>
+    <div class="store"><span id="userInfo"></span><button class="logout" id="logoutBtn">로그아웃</button></div>
+  </div>
+
+  <div class="shell">
+    <nav class="sidebar" id="sidebar">
+      <div class="nav-sec" data-role="vendor">운영</div>
+      <button class="nav-item" data-view="dashboard" data-gated="1" data-role="vendor"><span class="ni">▤</span> 판매현황</button>
+      <button class="nav-item" data-view="redeem" data-gated="1" data-role="vendor"><span class="ni">◎</span> 쿠폰 사용처리</button>
+      <button class="nav-item" data-view="sms" data-gated="1" data-role="vendor"><span class="ni">💬</span> 알림 문자 이력</button>
+      <div class="nav-sec" data-role="vendor">정산</div>
+      <button class="nav-item" data-view="settlement" data-gated="1" data-role="vendor"><span class="ni">₩</span> 정산 관리</button>
+      <button class="nav-item" data-view="statements" data-gated="1" data-role="vendor"><span class="ni">🧾</span> 정산 명세서</button>
+      <div class="nav-sec" data-role="vendor">계정</div>
+      <button class="nav-item" data-view="access" data-role="vendor"><span class="ni">🔑</span> 업체 권한</button>
+      <button class="nav-item" data-view="settings" data-role="vendor"><span class="ni">⚙</span> 업체·정산 정보</button>
+      <div class="nav-sec" data-role="staff">바른손카드</div>
+      <button class="nav-item" data-view="ops" data-role="staff"><span class="ni">📊</span> 운영 대시보드</button>
+      <button class="nav-item" data-view="staff" data-role="staff"><span class="ni">🛡</span> 직원 콘솔</button>
+      <div class="nav-sec">지원</div>
+      <button class="nav-item" data-view="notice" data-role="vendor"><span class="ni">📢</span> 공지사항</button>
+      <button class="nav-item" data-view="contact" data-role="vendor"><span class="ni">✉</span> 1:1 문의</button>
+      <button class="nav-item" data-view="guide"><span class="ni">ⓘ</span> 약관·정산 안내</button>
+    </nav>
+
+    <main class="main">
+
+      <!-- ===== 판매현황 ===== -->
+      <section class="view show" id="view-dashboard">
+        <div class="page-head"><h1>판매현황</h1><p>구매된 전체 판매는 집계로 확인합니다. 고객 정보는 <b>실제 사용(방문) 시점</b>에만 아래 ‘사용 내역’에 표시됩니다.</p></div>
+        <div class="stats" id="dashStats"></div>
+        <div class="panel">
+          <h2>상품별 판매 요약</h2>
+          <p class="desc">구매된 전체 데이터 집계입니다. (개인정보 미포함)</p>
+          <div id="dashSummary"></div>
+        </div>
+        <div class="panel">
+          <h2>사용 내역</h2>
+          <p class="desc">사용처리·차감이 완료된 건만 표시됩니다. 행을 클릭하면 상세를 볼 수 있어요. <b>사용 전 쿠폰의 고객 정보는 노출되지 않습니다.</b></p>
+          <div class="tabs" id="dashTabs">
+            <button class="tab on" data-filter="all">전체</button>
+            <button class="tab" data-filter="service">일반 쿠폰</button>
+            <button class="tab" data-filter="amount">자유이용권</button>
+            <button class="tab" data-filter="count">다회권</button>
+          </div>
+          <div id="dashList"></div>
+        </div>
+      </section>
+
+      <!-- ===== 쿠폰 사용처리 ===== -->
+      <section class="view" id="view-redeem">
+        <div class="page-head"><h1>쿠폰 사용처리</h1><p>고객 방문 시 쿠폰번호·연락처·이름으로 조회한 뒤 사용처리하세요. 금액형 자유이용권은 사용한 금액만큼 차감합니다. 쿠폰은 구매 지점과 관계없이 <b>전 지점에서 사용 가능</b>합니다.</p></div>
+        <div class="panel">
+          <div class="field" style="max-width:340px;margin-bottom:var(--sp-4)">
+            <label for="branchSel">처리 지점</label>
+            <select id="branchSel"></select>
+            <div class="help">정산은 <b>사용처리한 지점</b> 기준으로 귀속됩니다. 정식 연동 시에는 지점 계정별로 자동 지정됩니다.</div>
+          </div>
+          <div class="tabs" id="searchTabs">
+            <button class="tab on" data-mode="all">통합검색</button>
+            <button class="tab" data-mode="code">쿠폰번호</button>
+            <button class="tab" data-mode="phone">연락처</button>
+            <button class="tab" data-mode="name">이름</button>
+          </div>
+          <div class="search-row">
+            <input id="searchInput" type="text" placeholder="쿠폰번호, 연락처(끝 4자리 가능), 이름으로 검색" />
+            <button class="btn-search" id="searchBtn">조회</button>
+          </div>
+          <div class="results" id="searchResults"></div>
+        </div>
+      </section>
+
+      <!-- ===== 쿠폰 등록 ===== -->
+      <!-- ===== 정산 관리 ===== -->
+      <section class="view" id="view-settlement">
+        <div class="page-head"><h1>정산 관리</h1><p>매월 <b>1일~말일</b>에 사용(사용처리·차감)된 금액을 <b>익월 25일</b>에 지급합니다. 정산은 <b>사용처리한 지점</b>에 귀속되어, 직영점 사용분은 본사 계좌로 합산·가맹점 사용분은 각 가맹점 계좌로 지급됩니다.</p></div>
+        <div class="stats" id="settleStats"></div>
+
+        <div class="panel">
+          <h2 id="nextPayTitle">다음 정산 예정</h2>
+          <p class="desc">해당 사용월(1일~말일)에 사용된 금액이 지급일에 등록 계좌로 입금됩니다.</p>
+          <div id="settleSummary"></div>
+        </div>
+
+        <div class="panel">
+          <h2>정산주체별 지급 (다음 정산)</h2>
+          <p class="desc">직영점 사용분은 <b>본사 정산 계좌로 합산 지급</b>, 가맹점 사용분은 <b>각 가맹점 계좌로 개별 지급</b>됩니다. 세금계산서도 사업자별로 발행됩니다.</p>
+          <div id="payeeSummary"></div>
+        </div>
+
+        <div class="panel">
+          <h2>정산 내역 (사용 기준)</h2>
+          <p class="desc">사용(사용처리·차감) 1건이 정산 1건입니다. 각 건은 사용처리한 지점에 귀속되며, 미사용분은 정산 대상이 아닙니다.</p>
+          <div id="settleList"></div>
+        </div>
+      </section>
+
+      <!-- ===== 1:1 문의 ===== -->
+      <section class="view" id="view-contact">
+        <div class="page-head"><h1>1:1 문의</h1><p>정산·쿠폰·제휴 관련 문의를 남기면 바른손카드 담당자에게 바로 전달됩니다.</p></div>
+        <div class="panel">
+          <h2>바른손카드에 문의하기</h2>
+          <p class="desc">아래 양식을 작성하면 담당자 메일(<b>jungmin.kim@barunn.net</b>)로 전송됩니다. ‘문의 보내기’를 누르면 메일 작성창이 열립니다.</p>
+          <form id="contactForm">
+            <div class="form-grid">
+              <div class="field">
+                <label>문의 유형</label>
+                <select id="ctCat">
+                  <option>정산 문의</option>
+                  <option>쿠폰 · 사용처리</option>
+                  <option>자유이용권 잔액 · 환불</option>
+                  <option>상품 제휴 · 입점</option>
+                  <option>기타</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>회신받을 연락처</label>
+                <input id="ctPhone" type="text" placeholder="010-0000-0000" />
+              </div>
+              <div class="field full">
+                <label>제목</label>
+                <input id="ctSubject" type="text" placeholder="문의 제목을 입력하세요" />
+              </div>
+              <div class="field full">
+                <label>문의 내용</label>
+                <textarea id="ctBody" placeholder="문의하실 내용을 자세히 적어주세요."></textarea>
+              </div>
+            </div>
+            <button class="btn-primary" type="submit" style="margin-top:var(--sp-5)">✉ 문의 보내기</button>
+            <p class="field help" style="text-align:center;margin-top:var(--sp-4)">메일앱이 열리지 않으면 <b>jungmin.kim@barunn.net</b> 으로 직접 보내주세요.</p>
+          </form>
+        </div>
+      </section>
+
+      <!-- ===== 약관·정산 안내 ===== -->
+      <section class="view" id="view-guide">
+        <div class="page-head"><h1>약관 · 정산 안내</h1><p>업체용 정산 방식과 쿠폰·환불 약관을 한 페이지에서 확인하세요.</p></div>
+        <div class="panel">
+          <div class="subnav" id="guideNav">
+            <button class="on" data-doc="settle">정산 방법</button>
+            <button data-doc="coupon">쿠폰 이용약관</button>
+            <button data-doc="refund">환불 · 청약철회</button>
+            <button data-doc="partner">입점 · 운영 약관</button>
+          </div>
+
+          <!-- 정산 방법 -->
+          <div class="doc show" id="doc-settle">
+            <div class="lead">바른라운지는 <strong>실제 사용(사용처리·차감)된 금액</strong>을 기준으로 정산합니다. 매월 1일~말일 사용분을 모아 <strong>익월 25일</strong>에 등록 계좌로 지급합니다.</div>
+
+            <h3>1. 정산 기준 — 사용한 만큼</h3>
+            <p>사용되지 않은 쿠폰은 정산 대상이 아니며, 고객이 실제 사용한 건에 대해서만 정산합니다.</p>
+            <table class="tbl">
+              <tr><th>구분</th><th>정산액</th></tr>
+              <tr><td>일반 쿠폰</td><td>사용처리 시 <strong>판매가 전액</strong></td></tr>
+              <tr><td>자유이용권(금액형)</td><td>차감할 때마다 <strong>차감 액면 × (결제액 ÷ 총 액면)</strong></td></tr>
+              <tr><td>다회권(횟수형)</td><td>회차 사용마다 <strong>사용 회수 × 회당 단가(결제액 ÷ 총 회수)</strong> · 마지막 회차는 끝수 보정(정산 합계 = 결제액)</td></tr>
+            </table>
+            <div class="callout"><b>다회권 예시</b> — 10회권을 300,000원에 판매(회당 30,000원). 6월에 3회 사용했다면<br>
+            · 정산액 = 3회 × 30,000 = <b>90,000원</b> → 7월 25일 지급<br>
+            · 남은 7회는 사용 전이므로 정산되지 않습니다.</div>
+
+            <h3>2. 지급 시기 — 익월 25일</h3>
+            <p>매월 <strong>1일~말일</strong>에 사용된 금액을 합산해 <strong>다음 달 25일</strong>에 지급합니다. (25일이 휴일이면 직전 영업일)</p>
+            <div class="callout"><b>예시</b> — 100만원권을 20만원에 판매(비율 20%). 6월에 30만원(액면)을 사용했다면<br>
+            · 정산액 = 300,000 × 20% = <b>60,000원</b> → <b>7월 25일</b> 지급<br>
+            · 남은 70만원은 사용 전이므로 정산되지 않습니다.</div>
+
+            <h3>3. 미사용분 처리</h3>
+            <p>사용되지 않은 쿠폰·잔액은 업체에 정산되지 않으며, 고객 환불 규정(‘환불·청약철회’ 탭 참고)에 따라 처리됩니다.</p>
+
+            <h3>4. 정산 제외 · 차감 항목</h3>
+            <ul>
+              <li>사용되지 않은 쿠폰·잔액 — 정산 대상 아님</li>
+              <li>별도 약정된 플랫폼 수수료 — 지급 시 차감</li>
+            </ul>
+
+            <h3>5. 다지점(직영·가맹) 정산</h3>
+            <p>쿠폰은 구매 시 지정한 지점과 관계없이 <strong>브랜드 전 지점에서 사용</strong>할 수 있습니다(전 지점 동일 상품·동일가 전제). 정산은 구매 지점이 아니라 <strong>실제 사용처리한 지점</strong>에 귀속됩니다.</p>
+            <table class="tbl">
+              <tr><th>구분</th><th>지급 방식</th></tr>
+              <tr><td>직영점 사용분</td><td>본사 정산 계좌로 <strong>합산 지급</strong></td></tr>
+              <tr><td>가맹점 사용분</td><td>해당 가맹점 정산 계좌로 <strong>개별 지급</strong> · 세금계산서도 사업자별 발행</td></tr>
+            </table>
+            <div class="callout"><b>예시</b> — 강남점(직영) 지정으로 판매된 자유이용권을 고객이 분당점(가맹)에서 30만원 차감 → 해당 건의 정산액은 <b>분당점(가맹) 계좌</b>로 지급됩니다.</div>
+          </div>
+
+          <!-- 쿠폰 이용약관 -->
+          <div class="doc" id="doc-coupon">
+            <div class="lead">바른라운지에서 발급된 <strong>쿠폰(모바일 교환권)</strong>의 사용·유효기간·양도에 관한 약관입니다. 업체는 본 약관에 따라 쿠폰을 사용처리합니다.</div>
+            <h3>제1조 (쿠폰의 사용)</h3>
+            <ol>
+              <li>고객은 매장 방문 시 쿠폰번호 또는 본인 확인 정보(이름·연락처)를 제시합니다.</li>
+              <li>업체는 관리자 페이지에서 쿠폰을 조회한 뒤 <strong>사용처리</strong>합니다. 서비스권은 1회 사용으로 소멸하며, <strong>금액형 자유이용권은 사용한 금액만큼</strong>, <strong>다회권(횟수형)은 사용한 회수만큼 차감</strong>되고 잔액·잔여 회수가 0이 되면 소멸합니다.</li>
+              <li>사용처리·차감된 내역은 되돌릴 수 없으므로 고객 본인 방문과 금액을 반드시 확인하세요.</li>
+            </ol>
+            <div class="callout">⚠️ <b>중복 사용 방지</b> — 쿠폰은 사용처리 즉시 상태가 갱신되며, 같은 쿠폰의 중복 처리는 시스템에서 차단됩니다.</div>
+            <h3>제2조 (유효기간)</h3>
+            <table class="tbl">
+              <tr><th>구분</th><th>내용</th></tr>
+              <tr><td>기본</td><td>구매일로부터 각 상품에 명시된 기간(일반 30~90일, 자유이용권 3개월 등)</td></tr>
+              <tr><td>만료 후</td><td>사용처리 불가. 단 「신유형 상품권 표준약관」에 따라 남은 가치에 대해 고객이 환불을 요청할 수 있음</td></tr>
+            </table>
+            <h3>제3조 (양도·부정사용)</h3>
+            <ul>
+              <li>대가 없는 양도는 가능하나 영리 목적 재판매는 금지됩니다.</li>
+              <li>위·변조되었거나 비정상 발급된 쿠폰은 사용을 거부할 수 있습니다.</li>
+            </ul>
+          </div>
+
+          <!-- 환불 -->
+          <div class="doc" id="doc-refund">
+            <div class="lead">「전자상거래법」과 「신유형 상품권 표준약관」에 따른 <strong>환불·청약철회</strong> 규정입니다. 미사용분은 업체에 정산되지 않으므로 환불은 결제 대금에서 직접 처리됩니다.</div>
+            <h3>제1조 (청약철회 기간)</h3>
+            <table class="tbl">
+              <tr><th>구분</th><th>가능 기간</th></tr>
+              <tr><td>일반 원칙</td><td>쿠폰 발급일로부터 <strong>7일 이내</strong> (미사용 시)</td></tr>
+              <tr><td>표시·광고와 다른 경우</td><td>안 날부터 30일 이내</td></tr>
+            </table>
+            <h3>제2조 (환불 금액)</h3>
+            <p>환불 금액은 <strong>고객이 실제 결제한 금액</strong>을 기준으로 합니다. (표시 정가·이용권 액면가가 아님)</p>
+            <table class="tbl">
+              <tr><th>상황</th><th>환불 금액</th></tr>
+              <tr><td>구매 후 7일 이내 · 미사용</td><td>결제금액 <strong>100%</strong> (청약철회)</td></tr>
+              <tr><td>7일 경과 ~ 유효기간 내 · 미사용</td><td>결제금액 <strong>100%</strong> (최소 90%)</td></tr>
+              <tr><td>유효기간 경과 ~ 소멸시효(5년) 내 · 미사용</td><td>결제금액의 <strong>90%</strong></td></tr>
+              <tr><td>금액형 부분사용</td><td>잔액을 <strong>결제액 비례</strong> 환불 (사용액이 액면의 60%, 1만원 이하는 80% 이상일 때)</td></tr>
+              <tr><td>다회권(횟수형) 부분사용</td><td>잔여 회수를 <strong>결제액 비례</strong> 환불 — 결제액 × (잔여회수 ÷ 총회수). 유효기간 경과 시 90%. 계속거래 해당 시 중도해지 환불 가능(위약금 기준은 법무 검토 중)</td></tr>
+              <tr><td>업체 귀책(폐업·불이행)</td><td>결제금액 <strong>100%</strong></td></tr>
+            </table>
+            <h3>제3조 (정산과의 관계)</h3>
+            <p>사용 기준 정산에서는 <strong>미사용 쿠폰이 업체에 정산되지 않으므로</strong>, 미사용분 환불로 인한 업체 역정산(환수)이 발생하지 않습니다. 이미 사용처리·차감된 건은 환불 대상이 아닙니다.</p>
+          </div>
+
+          <!-- 입점/운영 -->
+          <div class="doc" id="doc-partner">
+            <div class="lead">업체(판매자)와 운영사 <strong>(주)바른손카드</strong> 간 입점·운영에 관한 약관 요지입니다.</div>
+            <h3>제1조 (운영사의 지위)</h3>
+            <p>운영사는 통신판매중개자로서 거래 당사자가 아니며, 상품·용역 제공 및 쿠폰 사용처리의 책임은 업체에 있습니다.</p>
+            <h3>제2조 (업체의 의무)</h3>
+            <ul>
+              <li>상품 정보를 정확히 제공하고, 표시된 조건대로 용역을 제공합니다.</li>
+              <li>고객이 제시한 정상 쿠폰을 정당한 사유 없이 거부하지 않습니다.</li>
+              <li>고객 개인정보(이름·연락처·쿠폰번호)는 사용처리 목적 외로 이용하지 않습니다.</li>
+            </ul>
+            <h3>제3조 (정산 계좌·세금계산서)</h3>
+            <ul>
+              <li>정산은 사용월(1일~말일) 사용분을 정산주체(본사·각 가맹점)가 등록한 계좌로 익월 25일 지급합니다.</li>
+              <li>세금계산서 등 증빙은 정산주체(사업자)별로 관련 법령과 약정에 따라 발행합니다.</li>
+            </ul>
+            <h3>제4조 (계약 해지)</h3>
+            <p>일방의 중대한 약관 위반 시 상대방은 시정 요구 후 계약을 해지할 수 있으며, 해지 시점까지 확정된 정산은 정상 지급됩니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 업체 권한 ===== -->
+      <section class="view" id="view-access">
+        <div class="page-head"><h1>업체 권한</h1><p>판매분(주문·정산)과 이 어드민을 연동하려면 업체 권한이 필요합니다. 아래에서 권한을 요청하면 바른손카드 검토 후 승인됩니다.</p></div>
+        <div class="panel" id="accessPanel"></div>
+      </section>
+
+      <!-- ===== 운영 대시보드 (바른손카드 내부) ===== -->
+      <section class="view" id="view-ops">
+        <div class="page-head"><h1>운영 대시보드</h1><p>바른손카드 전체 매출·쿠폰 사용률·업체별 정산 현황입니다.</p></div>
+        <div class="stats" id="opsStats"></div>
+        <div class="panel">
+          <h2>업체별 현황</h2>
+          <p class="desc">매출·쿠폰 사용률·정산액을 업체별로 확인합니다. (매출 높은 순)</p>
+          <div id="opsList"></div>
+        </div>
+      </section>
+
+      <!-- ===== 직원 콘솔 (바른손카드 내부) ===== -->
+      <section class="view" id="view-staff">
+        <div class="page-head"><h1>직원 콘솔</h1><p>바른손카드 내부 직원 전용. 업체 회원의 권한 신청을 검토하고 승인하면 해당 업체 판매분과 어드민이 연동됩니다.</p></div>
+        <div class="stats" id="staffStats"></div>
+        <div class="panel">
+          <h2>업체 회원 · 권한 신청</h2>
+          <p class="desc">‘승인 대기’ 업체를 검토해 승인/반려하세요.</p>
+          <div id="staffList"></div>
+        </div>
+        <div class="panel">
+          <h2>공지사항 관리</h2>
+          <p class="desc">여기서 등록한 공지는 모든 입점 업체의 ‘공지사항’ 메뉴에 노출됩니다.</p>
+          <form id="noticeForm">
+            <div class="field"><label>제목</label><input id="ntTitle" type="text" placeholder="공지 제목" /></div>
+            <div class="field"><label>내용</label><textarea id="ntBody" placeholder="공지 내용을 입력하세요"></textarea></div>
+            <label class="check"><input id="ntPinned" type="checkbox" /> 상단 고정</label>
+            <button class="btn-primary" type="submit" style="max-width:220px;margin-top:var(--sp-3)">공지 등록</button>
+          </form>
+          <div id="staffNoticeList" style="margin-top:var(--sp-6)"></div>
+        </div>
+      </section>
+
+      <!-- ===== 알림 문자 이력 ===== -->
+      <section class="view" id="view-sms">
+        <div class="page-head"><h1>알림 문자 이력</h1><p>쿠폰 사용처리·차감 시 고객에게 발송된 알림 문자 내역입니다.</p></div>
+        <div class="panel">
+          <h2>발송 내역</h2>
+          <p class="desc">최신순으로 표시됩니다. CS·분쟁 대응 시 참고하세요.</p>
+          <div id="smsList"></div>
+        </div>
+      </section>
+
+      <!-- ===== 정산 명세서 ===== -->
+      <section class="view" id="view-statements">
+        <div class="page-head"><h1>정산 명세서</h1><p>지급일별 정산 명세서와 세금계산서입니다. 명세서는 내려받아 보관할 수 있습니다.</p></div>
+        <div class="panel">
+          <h2>월별 정산 내역</h2>
+          <p class="desc">사용월(1일~말일) 기준으로 합산되어 익월 25일에 지급됩니다. 지급은 정산주체(본사·각 가맹점 사업자)별로 구분됩니다.</p>
+          <div id="stmtList"></div>
+        </div>
+      </section>
+
+      <!-- ===== 업체·정산 정보 ===== -->
+      <section class="view" id="view-settings">
+        <div class="page-head"><h1>업체·정산 정보</h1><p>정산 대금을 받을 계좌와 세금계산서 발행 정보를 등록·수정합니다.</p></div>
+        <div class="panel" id="settingsPanel"></div>
+      </section>
+
+      <!-- ===== 공지사항 ===== -->
+      <section class="view" id="view-notice">
+        <div class="page-head"><h1>공지사항</h1><p>바른손카드에서 입점 업체에 전하는 공지입니다.</p></div>
+        <div class="panel">
+          <div id="noticeList"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- coupon detail / redeem / deduct -->
+<div class="overlay" id="detailOverlay">
+  <div class="ticket" id="ticketBox"></div>
+</div>
+<!-- confirm -->
+<div class="overlay" id="confirmOverlay">
+  <div class="confirm">
+    <h3 id="confirmTitle">처리할까요?</h3>
+    <p id="confirmMsg"></p>
+    <div class="confirm-btns">
+      <button class="c-cancel" id="confirmCancel">취소</button>
+      <button class="c-ok" id="confirmOk">확인</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+</body>
+</html>
