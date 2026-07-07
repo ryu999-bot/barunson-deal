@@ -13,7 +13,8 @@ import { balanceOf } from './domain';
 // 지점 표기: '더마린클리닉 강남점'
 const branchName = (id?: string) => `${BRAND} ${branchOf(id).name}`;
 
-// 쿠폰은 구매 시 대표 지점(branchId)이 지정되지만 전 지점에서 사용 가능.
+// 쿠폰은 구매 시 지점(branchId)이 지정되며, 그 지점을 운영하는 "사업자(정산주체)"의 지점에서만 사용 가능.
+// 직영 계열(본사 사업자)은 직영 지점 간 교차 사용 가능, 가맹점 쿠폰은 해당 가맹점에서만 사용.
 // 사용처리·차감 시 처리 지점이 기록되고(usedBranchId / history[].branchId) 정산은 그 지점에 귀속.
 let COUPONS: Coupon[] = [
   // 일반 쿠폰 (단일 상품 · 1회 사용)
@@ -23,20 +24,20 @@ let COUPONS: Coupon[] = [
   { code: 'GL26-1182-9930', type: 'service', product: '프리미엄 클리닉 펌 + 트리트먼트', name: '정하늘', phone: '010-5567-2218', buyDate: '2026-05-30', expire: '2026-08-28', origin: 180000, paid: 89000, status: 'used', usedAt: '2026-06-29 19:42', branchId: 'gangnam', usedBranchId: 'gangnam', usedBy: '더마린클리닉 강남점' },
   // 가맹점(부산서면점)에서 사용처리된 건 — 정산은 가맹점 계좌로
   { code: 'GL26-4417-8820', type: 'service', product: '슈링크 리프팅 300샷 (탄력·윤곽)', name: '오세훈', phone: '010-3344-7790', buyDate: '2026-05-15', expire: '2026-07-23', origin: 150000, paid: 59000, status: 'used', usedAt: '2026-06-26 13:10', branchId: 'seomyeon', usedBranchId: 'seomyeon', usedBy: '더마린클리닉 부산서면점' },
-  // 자유이용권 (금액형) — 강남점 구매분을 분당점(가맹)에서도 차감한 교차 사용 사례 포함
-  { code: 'GL26-2200-0001', type: 'amount', product: '스킨케어 자유이용권 (100만원권)', name: '박지훈', phone: '010-7782-1145', buyDate: '2026-05-01', expire: '2026-08-01', paid: 200000, face: 1000000, used: 300000, status: 'available', branchId: 'gangnam', history: [{ date: '2026-05-12 14:20', amount: 200000, branchId: 'gangnam' }, { date: '2026-06-18 11:05', amount: 100000, branchId: 'bundang' }] },
+  // 자유이용권 (금액형) — 강남점 구매분을 홍대점(같은 본사 직영)에서도 차감한 교차 사용 사례 포함
+  { code: 'GL26-2200-0001', type: 'amount', product: '스킨케어 자유이용권 (100만원권)', name: '박지훈', phone: '010-7782-1145', buyDate: '2026-05-01', expire: '2026-08-01', paid: 200000, face: 1000000, used: 300000, status: 'available', branchId: 'gangnam', history: [{ date: '2026-05-12 14:20', amount: 200000, branchId: 'gangnam' }, { date: '2026-06-18 11:05', amount: 100000, branchId: 'hongdae' }] },
   { code: 'GL26-2200-0002', type: 'amount', product: '프리미엄 자유이용권 (50만원권)', name: '최민지', phone: '010-2941-6620', buyDate: '2026-03-01', expire: '2026-06-01', paid: 120000, face: 500000, used: 300000, status: 'available', branchId: 'hongdae', history: [{ date: '2026-03-20 16:40', amount: 300000, branchId: 'hongdae' }] },
   { code: 'GL26-2200-0003', type: 'amount', product: '바디·스파 자유이용권 (100만원권)', name: '한지우', phone: '010-8810-4456', buyDate: '2026-06-10', expire: '2026-09-10', paid: 200000, face: 1000000, used: 0, status: 'available', branchId: 'bundang', history: [] },
   { code: 'GL26-2200-0004', type: 'amount', product: '스킨케어 자유이용권 (100만원권)', name: '김도연', phone: '010-9921-5508', buyDate: '2026-04-20', expire: '2026-07-20', paid: 200000, face: 1000000, used: 1000000, status: 'used', usedAt: '2026-06-20 15:30', branchId: 'gangnam', usedBranchId: 'hongdae', usedBy: '더마린클리닉 홍대점', history: [{ date: '2026-05-02 13:00', amount: 500000, branchId: 'gangnam' }, { date: '2026-06-20 15:30', amount: 500000, branchId: 'hongdae' }] },
   // 다회권 (횟수형) — face=총 회수, used=사용 회수. 정산 = 회당 균등 단가(결제액÷총회수) × 사용 회수
-  { code: 'GL26-3300-0001', type: 'count', product: '아쿠아필 딥클렌징 10회권', name: '윤소라', phone: '010-6642-7789', buyDate: '2026-05-05', expire: '2026-11-05', origin: 500000, paid: 300000, face: 10, used: 3, status: 'available', branchId: 'gangnam', history: [{ date: '2026-05-15 15:00', amount: 2, branchId: 'gangnam' }, { date: '2026-06-21 12:30', amount: 1, branchId: 'bundang' }] },
+  { code: 'GL26-3300-0001', type: 'count', product: '아쿠아필 딥클렌징 10회권', name: '윤소라', phone: '010-6642-7789', buyDate: '2026-05-05', expire: '2026-11-05', origin: 500000, paid: 300000, face: 10, used: 3, status: 'available', branchId: 'gangnam', history: [{ date: '2026-05-15 15:00', amount: 2, branchId: 'gangnam' }, { date: '2026-06-21 12:30', amount: 1, branchId: 'hongdae' }] },
   { code: 'GL26-3300-0002', type: 'count', product: '두피 스케일링 3회권', name: '서지안', phone: '010-2210-9934', buyDate: '2026-05-10', expire: '2026-08-10', origin: 150000, paid: 100000, face: 3, used: 2, status: 'available', branchId: 'hongdae', history: [{ date: '2026-05-22 11:00', amount: 1, branchId: 'hongdae' }, { date: '2026-06-14 17:20', amount: 1, branchId: 'hongdae' }] },
 ];
 
 // 발송된 알림 문자 이력 (연동 시 서버 조회로 교체)
 const SMS_LOG: SmsEntry[] = [
   { at: '2026-06-29 19:42', phone: '010-5567-2218', message: "[바른라운지] 정하늘님, '프리미엄 클리닉 펌 + 트리트먼트' 쿠폰이 정상 사용처리되었습니다. 이용해 주셔서 감사합니다. - 더마린클리닉 강남점", kind: 'redeem' },
-  { at: '2026-06-18 11:05', phone: '010-7782-1145', message: "[바른라운지] 박지훈님, '스킨케어 자유이용권 (100만원권)' 100,000원 사용. 남은 잔액 700,000원. - 더마린클리닉 분당점", kind: 'deduct' },
+  { at: '2026-06-18 11:05', phone: '010-7782-1145', message: "[바른라운지] 박지훈님, '스킨케어 자유이용권 (100만원권)' 100,000원 사용. 남은 잔액 700,000원. - 더마린클리닉 홍대점", kind: 'deduct' },
 ];
 
 // 운영사 공지사항 — 직원이 등록/삭제 (연동 시 서버 API로 교체)

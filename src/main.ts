@@ -14,13 +14,12 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 let coupons: Coupon[] = [];
 async function reload() { coupons = await api.listCoupons(); }
 
-// 현재 처리 지점 — 데모에서는 셀렉터로 전환, 정식 연동 시 지점 계정에 고정
+// 현재 처리 지점 — 계정의 지점 스코프 내에서만 선택 가능 (enterApp의 initBranchSel에서 설정)
 let branch = BRANCHES[0];
-{
-  const sel = $('branchSel') as HTMLSelectElement;
-  sel.innerHTML = BRANCHES.map((b) => `<option value="${b.id}">${b.name} · ${b.kind === 'franchise' ? '가맹' : '직영'}</option>`).join('');
-  sel.onchange = () => { branch = branchOf(sel.value); toast(`처리 지점: ${branch.name} (${branch.kind === 'franchise' ? '가맹' : '직영'})`); };
-}
+($('branchSel') as HTMLSelectElement).onchange = () => {
+  branch = branchOf(($('branchSel') as HTMLSelectElement).value);
+  toast(`처리 지점: ${branch.name} (${branch.kind === 'franchise' ? '가맹' : '직영'})`);
+};
 const branchLabel = (id?: string) => {
   const b = branchOf(id);
   return `${b.name}${b.kind === 'franchise' ? '<span style="color:var(--sub);font-size:var(--fs-cap)"> 가맹</span>' : ''}`;
@@ -38,53 +37,38 @@ const branchCell = (c: Coupon): string => {
 
 // 현재 사용자
 let user: User | null = null;
-const GATED = new Set(['dashboard', 'redeem', 'sms', 'settlement', 'statements']);
 
-/* ================= Auth (로그인 / 회원가입 / Google) ================= */
-let authMode: 'login' | 'signup' = 'login';
-$('authTabs').onclick = (e) => {
-  const t = (e.target as HTMLElement).closest('.tab') as HTMLElement;
-  if (!t) return;
-  document.querySelectorAll('#authTabs .tab').forEach((x) => x.classList.remove('on'));
-  t.classList.add('on');
-  authMode = t.dataset.auth as 'login' | 'signup';
-  const signup = authMode === 'signup';
-  $('nameField').style.display = signup ? 'block' : 'none';
-  $('signupExtra').style.display = signup ? 'block' : 'none';
-  ($('auPw') as HTMLInputElement).placeholder = signup ? '8자 이상, 특수문자 포함' : '비밀번호';
-  $('authSubmit').textContent = signup ? '회원가입' : '로그인';
-};
+// 계정에 묶인 지점 스코프 — 본사 계정: 직영 지점들 / 가맹 계정: 자기 지점 / 직원: 전체
+const allowedBranches = () =>
+  user?.role === 'vendor' && user.branchIds?.length ? BRANCHES.filter((b) => user!.branchIds!.includes(b.id)) : BRANCHES;
+const allowedIds = () => new Set(allowedBranches().map((b) => b.id));
 
-// 비밀번호 규칙: 8자 이상 + 특수문자 포함
-const pwValid = (pw: string) => pw.length >= 8 && /[^A-Za-z0-9]/.test(pw);
+// ── 사용 범위 규칙: 쿠폰은 "판매 지점을 운영하는 사업자(정산주체)"의 지점에서만 사용 가능.
+//    직영 계열(본사 사업자 1개)은 직영 지점 간 교차 사용 가능, 가맹점 쿠폰은 해당 가맹점 전용.
+const payeeOf = (c: Coupon) => branchOf(c.branchId).payee;
+const myPayees = () => new Set(allowedBranches().map((b) => b.payee));
+const canRedeem = (c: Coupon) => user?.role !== 'vendor' || myPayees().has(payeeOf(c));
+// 쿠폰을 사용할 수 있는 지점들 (동일 사업자 소속)
+const usableBranches = (c: Coupon) => BRANCHES.filter((b) => b.payee === payeeOf(c));
 
+// 이 계정(사업자)의 쿠폰 — 판매현황·정산·사용처리 검색 공통 스코프
+function visibleCoupons(): Coupon[] {
+  if (user?.role !== 'vendor' || !user.branchIds?.length) return coupons;
+  const payees = myPayees();
+  return coupons.filter((c) => payees.has(payeeOf(c)));
+}
+
+/* ================= Auth (로그인 — 계정은 바른손카드가 사업자별 발급) ================= */
 $('authForm').onsubmit = async (e) => {
   e.preventDefault();
   const email = ($('auEmail') as HTMLInputElement).value.trim();
   const pw = ($('auPw') as HTMLInputElement).value;
-  const name = ($('auName') as HTMLInputElement).value.trim();
-  if (!email || !pw) { toast('⚠️ 이메일과 비밀번호를 입력하세요'); return; }
-
+  if (!email || !pw) { toast('⚠️ 아이디와 비밀번호를 입력하세요'); return; }
   try {
-    if (authMode === 'signup') {
-      const pw2 = ($('auPw2') as HTMLInputElement).value;
-      const phone = ($('auPhone') as HTMLInputElement).value.trim();
-      const bizNo = ($('auBiz') as HTMLInputElement).value.trim();
-      const certFile = ($('auCert') as HTMLInputElement).files?.[0];
-      if (!name) { toast('⚠️ 이름(담당자명)을 입력하세요'); return; }
-      if (!pwValid(pw)) { toast('⚠️ 비밀번호는 8자 이상이며 특수문자를 포함해야 해요'); return; }
-      if (pw !== pw2) { toast('⚠️ 비밀번호가 일치하지 않아요'); return; }
-      if (!phone) { toast('⚠️ 연락처를 입력하세요'); return; }
-      if (!bizNo) { toast('⚠️ 사업자등록번호를 입력하세요'); return; }
-      if (!certFile) { toast('⚠️ 사업자등록증을 첨부하세요'); return; }
-      user = await auth.signup(email, name, pw, { phone, bizNo, certName: certFile.name });
-    } else {
-      user = await auth.login(email, pw);
-    }
+    user = await auth.login(email, pw);
     await enterApp();
-  } catch (err: any) {
-    if (err?.message === 'EXISTS') toast('⚠️ 이미 가입된 이메일이에요. 로그인해 주세요');
-    else toast('⚠️ 이메일 또는 비밀번호가 올바르지 않아요');
+  } catch {
+    toast('⚠️ 아이디 또는 비밀번호가 올바르지 않아요. 계정 문의: jungmin.kim@barunn.net');
   }
 };
 
@@ -120,12 +104,21 @@ async function enterApp() {
   if (!user) return;
   $('authView').style.display = 'none';
   $('adminView').style.display = 'block';
-  await reload();
+  // 데이터 로드 전에 사용자 표시부터 갱신 (이전 세션 잔상 방지)
   renderUserBar();
   applyRole();
-  applyGate();
-  if (user.role === 'staff') showView('ops');
-  else showView(user.vendorAccess === 'granted' ? 'dashboard' : 'access');
+  initBranchSel();
+  await reload();
+  showView(user.role === 'staff' ? 'ops' : 'dashboard');
+}
+
+// 처리 지점 셀렉터를 계정 스코프로 제한 — 지점이 1개면 고정(변경 불가)
+function initBranchSel() {
+  const sel = $('branchSel') as HTMLSelectElement;
+  const list = allowedBranches();
+  branch = list[0];
+  sel.innerHTML = list.map((b) => `<option value="${b.id}">${b.name} · ${b.kind === 'franchise' ? '가맹' : '직영'}</option>`).join('');
+  sel.disabled = list.length === 1;
 }
 $('logoutBtn').onclick = () => {
   auth.logout();
@@ -136,16 +129,9 @@ $('logoutBtn').onclick = () => {
 
 function renderUserBar() {
   if (!user) return;
-  let badge: string;
-  if (user.role === 'staff') {
-    badge = `<span class="access-badge">🛡 바른손카드 직원</span>`;
-  } else if (user.vendorAccess === 'granted') {
-    badge = `<span class="access-badge">🏪 ${user.vendorName || VENDOR.name}</span>`;
-  } else if (user.vendorAccess === 'pending') {
-    badge = `<span class="access-badge">승인 대기</span>`;
-  } else {
-    badge = `<span class="access-badge">권한 없음</span>`;
-  }
+  const badge = user.role === 'staff'
+    ? `<span class="access-badge">🛡 바른손카드 직원</span>`
+    : `<span class="access-badge">🏪 ${user.vendorName || VENDOR.name}</span>`;
   $('userInfo').innerHTML = `<span class="uname">${user.name}</span>${badge}`;
 }
 function applyRole() {
@@ -154,74 +140,15 @@ function applyRole() {
     el.style.display = el.dataset.role === role ? '' : 'none';
   });
 }
-function applyGate() {
-  const granted = user?.vendorAccess === 'granted';
-  document.querySelectorAll('.nav-item[data-gated]').forEach((el) => el.classList.toggle('locked', !granted));
-}
-
-/* ================= 업체 권한 (요청·승인) ================= */
-function renderAccess() {
-  const panel = $('accessPanel');
-  const acc = user?.vendorAccess || 'none';
-  if (acc === 'granted') {
-    panel.innerHTML = `<div class="access-status granted"><span class="ico">✅</span><div><b>승인 완료</b> — <b>${user?.vendorName || VENDOR.name}</b> 판매분과 연동되었습니다.<br>판매현황·정산 메뉴를 이용할 수 있어요.</div></div>
-      <button class="btn-primary" id="goDash" style="max-width:280px">판매현황으로 가기</button>`;
-    $('goDash').onclick = () => showView('dashboard');
-    return;
-  }
-  if (acc === 'pending') {
-    const r = user?.request;
-    panel.innerHTML = `<div class="access-status pending"><span class="ico">⏳</span><div><b>승인 대기 중</b> — 바른손카드 직원이 검토 후 연동합니다.<br>신청: ${r?.vendorName || ''} · 사업자 ${r?.bizNo || ''} · ${r?.at || ''}</div></div>
-      <p class="desc">바른손카드 직원이 <b>직원 콘솔</b>에서 승인하면 판매현황·정산이 열립니다. (데모에서는 아래 버튼으로 승인을 시뮬레이션할 수 있어요.)</p>
-      <button class="btn-primary" id="approveBtn" style="max-width:300px">데모: 직원 승인 시뮬레이션</button>`;
-    $('approveBtn').onclick = async () => {
-      user = await auth.approveVendor(user!.email);
-      renderUserBar(); applyGate();
-      toast('✓ 권한이 승인되었어요');
-      showView('dashboard');
-    };
-    return;
-  }
-  panel.innerHTML = `
-    <div class="access-status none"><span class="ico">🔑</span><div>아직 업체 권한이 없습니다. 아래 정보를 제출하면 바른손카드 검토 후 판매분과 연동됩니다.</div></div>
-    <h2>업체 권한 요청</h2>
-    <p class="desc">가입 시 입력한 정보가 채워져 있습니다. 업체명(상호)을 확인하고 요청하세요.</p>
-    <form id="accessForm">
-      <div class="form-grid">
-        <div class="field full"><label>업체명(상호)</label><input id="acVendor" type="text" placeholder="예: 더마린클리닉 (브랜드/본사)" /></div>
-        <div class="field"><label>사업자등록번호</label><input id="acBiz" type="text" placeholder="000-00-00000" value="${user?.bizNo || ''}" /></div>
-        <div class="field"><label>담당자 연락처</label><input id="acPhone" type="text" placeholder="010-0000-0000" value="${user?.phone || ''}" /></div>
-        <div class="field full"><label>담당자명</label><input id="acManager" type="text" placeholder="예: 홍길동" value="${user?.name || ''}" /></div>
-      </div>
-      <button class="btn-primary" type="submit" style="margin-top:var(--sp-5)">권한 요청 보내기</button>
-    </form>`;
-  $('accessForm').onsubmit = async (e) => {
-    e.preventDefault();
-    const vendorName = ($('acVendor') as HTMLInputElement).value.trim();
-    const bizNo = ($('acBiz') as HTMLInputElement).value.trim();
-    const phone = ($('acPhone') as HTMLInputElement).value.trim();
-    const manager = ($('acManager') as HTMLInputElement).value.trim();
-    if (!vendorName || !bizNo) { toast('⚠️ 업체명과 사업자등록번호를 입력하세요'); return; }
-    user = await auth.requestVendorAccess({ vendorName, bizNo, manager, phone });
-    renderUserBar(); applyGate();
-    toast('✓ 권한 요청을 보냈어요');
-    renderAccess();
-  };
-}
 
 /* ================= Nav ================= */
 function showView(v: string) {
-  if (GATED.has(v) && user?.vendorAccess !== 'granted') {
-    toast('🔒 먼저 업체 권한을 받아야 해요');
-    v = 'access';
-  }
-  if ((v === 'staff' || v === 'ops') && user?.role !== 'staff') v = 'access';
+  if ((v === 'staff' || v === 'ops') && user?.role !== 'staff') v = 'dashboard';
   document.querySelectorAll('.view').forEach((x) => x.classList.remove('show'));
   $('view-' + v).classList.add('show');
   document.querySelectorAll('.nav-item').forEach((x) => x.classList.toggle('on', (x as HTMLElement).dataset.view === v));
   if (v === 'dashboard') renderDashboard();
   if (v === 'settlement') renderSettlement();
-  if (v === 'access') renderAccess();
   if (v === 'ops') renderOps();
   if (v === 'staff') renderStaff();
   if (v === 'sms') renderSms();
@@ -262,41 +189,52 @@ async function renderOps() {
     }).join('')}</tbody></table>`;
 }
 
-/* ================= 직원 콘솔 ================= */
+/* ================= 직원 콘솔 (계정 발급) ================= */
 async function renderStaff() {
   const vendors = await auth.listVendors();
-  const pending = vendors.filter((v) => v.vendorAccess === 'pending');
-  const granted = vendors.filter((v) => v.vendorAccess === 'granted');
+  const branchCount = new Set(vendors.flatMap((v) => v.branchIds || [])).size;
   $('staffStats').innerHTML = `
-    <div class="stat"><div class="lbl">업체 회원</div><div class="num">${vendors.length}<small> 곳</small></div><div class="sub2">가입 기준</div></div>
-    <div class="stat accent"><div class="lbl">승인 대기</div><div class="num">${pending.length}<small> 건</small></div><div class="sub2">검토 필요</div></div>
-    <div class="stat green"><div class="lbl">연동 완료</div><div class="num">${granted.length}<small> 곳</small></div><div class="sub2">판매분 연동됨</div></div>`;
+    <div class="stat"><div class="lbl">발급 계정</div><div class="num">${vendors.length}<small> 개</small></div><div class="sub2">사업자 기준</div></div>
+    <div class="stat green"><div class="lbl">연결 지점</div><div class="num">${branchCount}<small> 곳</small></div><div class="sub2">직영+가맹</div></div>
+    <div class="stat accent"><div class="lbl">브랜드 지점</div><div class="num">${BRANCHES.length}<small> 곳</small></div><div class="sub2">등록 기준</div></div>`;
+
+  // 발급 폼 — 운영 지점 체크박스
+  $('isBranches').innerHTML = BRANCHES.map((b) =>
+    `<label class="check" style="margin:0"><input type="checkbox" class="isBr" value="${b.id}" /> ${b.name}(${b.kind === 'franchise' ? '가맹' : '직영'})</label>`).join('');
+  $('issueForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const g = (id: string) => ($(id) as HTMLInputElement).value.trim();
+    const branchIds = [...document.querySelectorAll<HTMLInputElement>('.isBr:checked')].map((c) => c.value);
+    if (!g('isVendor') || !g('isEmail') || !g('isPw')) { toast('⚠️ 사업자명·아이디·초기 비밀번호를 입력하세요'); return; }
+    if (!branchIds.length) { toast('⚠️ 운영 지점을 1개 이상 선택하세요'); return; }
+    try {
+      await auth.issueAccount({ email: g('isEmail'), name: g('isName') || g('isVendor'), pw: g('isPw'), vendorName: g('isVendor'), bizNo: g('isBiz'), branchIds });
+      ($('issueForm') as HTMLFormElement).reset();
+      toast('✓ 계정을 발급했어요');
+      renderStaff();
+    } catch { toast('⚠️ 이미 발급된 아이디예요'); }
+  };
+
   const box = $('staffList');
   if (!vendors.length) {
-    box.innerHTML = `<div class="no-result"><div class="ico">🗂️</div><div class="lead">아직 가입한 업체가 없어요.</div>업체가 회원가입하면 여기에 표시됩니다.</div>`;
-    return;
-  }
-  const stBadge = (a: string) =>
-    a === 'granted' ? '<span class="badge ok">연동완료</span>' : a === 'pending' ? '<span class="badge amount">승인대기</span>' : '<span class="badge info">미신청</span>';
-  box.innerHTML = `<table><thead><tr>
-    <th>업체 / 담당자</th><th class="col-hide">이메일</th><th>사업자번호</th><th class="col-hide">연락처</th><th>상태</th><th>처리</th>
-    </tr></thead><tbody>${vendors.map((v) => {
-      const action = v.vendorAccess === 'pending'
-        ? `<button class="btn-mini approve" data-email="${v.email}">승인</button> <button class="btn-mini ghost reject" data-email="${v.email}">반려</button>`
-        : v.vendorAccess === 'granted'
-          ? `<button class="btn-mini ghost reject" data-email="${v.email}">연동 해제</button>`
-          : '<span style="color:var(--sub)">신청 전</span>';
-      return `<tr>
-        <td><b>${v.request?.vendorName || v.vendorName || '미입력'}</b><div style="color:var(--sub);font-size:var(--fs-cap)">${v.name}</div></td>
+    box.innerHTML = `<div class="no-result"><div class="ico">🗂️</div><div class="lead">발급된 계정이 없어요.</div>위에서 사업자별 계정을 발급하세요.</div>`;
+  } else {
+    box.innerHTML = `<table><thead><tr>
+      <th>사업자(정산주체)</th><th class="col-hide">아이디</th><th>운영 지점</th><th class="col-hide">사업자번호</th><th>발급일</th><th>처리</th>
+      </tr></thead><tbody>${vendors.map((v) => `<tr>
+        <td><b>${v.vendorName || '-'}</b><div style="color:var(--sub);font-size:var(--fs-cap)">${v.name}</div></td>
         <td class="col-hide">${v.email}</td>
-        <td>${v.request?.bizNo || v.bizNo || '-'}${v.certName ? `<div style="color:var(--sub);font-size:var(--fs-cap)">📎 ${v.certName}</div>` : ''}</td>
-        <td class="col-hide">${v.request?.phone || v.phone || '-'}</td>
-        <td>${stBadge(v.vendorAccess)}</td>
-        <td>${action}</td>
-      </tr>`;
-    }).join('')}</tbody></table>`;
-  box.querySelectorAll('.approve').forEach((b) => ((b as HTMLElement).onclick = async () => { await auth.approveVendor((b as HTMLElement).dataset.email!); toast('✓ 승인했어요'); renderStaff(); }));
-  box.querySelectorAll('.reject').forEach((b) => ((b as HTMLElement).onclick = async () => { await auth.rejectVendor((b as HTMLElement).dataset.email!); toast('반려 처리했어요'); renderStaff(); }));
+        <td>${(v.branchIds || []).map((id) => branchOf(id).name).join(', ') || '-'}</td>
+        <td class="col-hide">${v.bizNo || '-'}</td>
+        <td>${v.issuedAt || '-'}</td>
+        <td><button class="btn-mini ghost revoke" data-email="${v.email}">회수</button></td>
+      </tr>`).join('')}</tbody></table>`;
+    box.querySelectorAll('.revoke').forEach((b) => ((b as HTMLElement).onclick = async () => {
+      await auth.revokeAccount((b as HTMLElement).dataset.email!);
+      toast('계정을 회수했어요');
+      renderStaff();
+    }));
+  }
   bindNoticeAdmin();
 }
 
@@ -374,12 +312,13 @@ let dashFilter = 'all';
 const transacted = (c: Coupon) => (c.type === 'amount' || c.type === 'count' ? (c.used || 0) > 0 : realStatus(c) === 'used');
 
 function renderDashboard() {
-  const total = coupons.length;
-  const usedCnt = coupons.filter(transacted).length;
+  const mine = visibleCoupons(); // 계정 지점 스코프 (구매 또는 사용이 자기 지점인 쿠폰)
+  const total = mine.length;
+  const usedCnt = mine.filter(transacted).length;
   const todayUsed =
-    coupons.filter((c) => c.usedAt && c.usedAt.startsWith(todayStr)).length +
-    coupons.filter((c) => c.type === 'amount' && (c.history || []).some((h) => h.date.startsWith(todayStr))).length;
-  const grossPaid = coupons.filter((c) => realStatus(c) !== 'refunded').reduce((s, c) => s + c.paid, 0);
+    mine.filter((c) => c.usedAt && c.usedAt.startsWith(todayStr)).length +
+    mine.filter((c) => c.type === 'amount' && (c.history || []).some((h) => h.date.startsWith(todayStr))).length;
+  const grossPaid = mine.filter((c) => realStatus(c) !== 'refunded').reduce((s, c) => s + c.paid, 0);
   $('dashStats').innerHTML = `
     <div class="stat"><div class="lbl">누적 판매</div><div class="num">${total}<small> 건</small></div><div class="sub2">구매된 전체</div></div>
     <div class="stat green"><div class="lbl">사용 완료</div><div class="num">${usedCnt}<small> 건</small></div><div class="sub2">방문·사용처리</div></div>
@@ -392,7 +331,7 @@ function renderDashboard() {
 // 상품별 판매 집계 (개인정보 미포함)
 function renderDashSummary() {
   const map = new Map<string, { product: string; sold: number; used: number; revenue: number }>();
-  for (const c of coupons) {
+  for (const c of visibleCoupons()) {
     if (realStatus(c) === 'refunded') continue;
     const e = map.get(c.product) || { product: c.product, sold: 0, used: 0, revenue: 0 };
     e.sold++;
@@ -412,7 +351,7 @@ function renderDashSummary() {
 }
 
 function renderDashList() {
-  const list = coupons.filter(transacted).filter((c) => (dashFilter === 'all' ? true : c.type === dashFilter));
+  const list = visibleCoupons().filter(transacted).filter((c) => (dashFilter === 'all' ? true : c.type === dashFilter));
   const box = $('dashList');
   if (!list.length) {
     box.innerHTML = `<div class="no-result"><div class="ico">🧾</div><div class="lead">아직 사용된 쿠폰이 없어요.</div>고객이 방문해 사용처리하면 여기에 표시됩니다.</div>`;
@@ -456,7 +395,7 @@ function runSearch() {
     return;
   }
   const digits = q.replace(/\D/g, '');
-  const hits = coupons.filter((c) => {
+  const match = (c: Coupon) => {
     const code = c.code.toLowerCase().replace(/-/g, '');
     const phone = c.phone.replace(/\D/g, '');
     const name = c.name.toLowerCase();
@@ -464,9 +403,15 @@ function runSearch() {
     if (mode === 'phone') return !!digits && phone.includes(digits);
     if (mode === 'name') return name.includes(q);
     return code.includes(q.replace(/-/g, '')) || (!!digits && phone.includes(digits)) || name.includes(q);
-  });
+  };
+  // 자기 사업자(정산주체) 쿠폰만 사용처리 대상
+  const hits = visibleCoupons().filter(match);
   if (!hits.length) {
-    box.innerHTML = `<div class="no-result"><div class="ico">🔍</div><div class="lead">일치하는 쿠폰이 없어요.</div>번호를 다시 확인하거나, 연락처 끝 4자리·이름으로 조회해 보세요.</div>`;
+    // 브랜드 내 다른 사업자 지점의 쿠폰이면 안내
+    const other = coupons.filter(match).filter((c) => !canRedeem(c));
+    box.innerHTML = other.length
+      ? `<div class="no-result"><div class="ico">🚫</div><div class="lead">다른 사업자 지점의 쿠폰이에요.</div>이 쿠폰은 <b>${payeeOf(other[0])}</b> (${usableBranches(other[0]).map((b) => b.name).join('·')}) 에서만 사용처리할 수 있습니다.</div>`
+      : `<div class="no-result"><div class="ico">🔍</div><div class="lead">일치하는 쿠폰이 없어요.</div>번호를 다시 확인하거나, 연락처 끝 4자리·이름으로 조회해 보세요.</div>`;
     return;
   }
   box.innerHTML = `<table><thead><tr>
@@ -508,7 +453,7 @@ function openDetail(code: string) {
       <div class="drow"><span class="k">고객명</span><span class="v">${c.name}</span></div>
       <div class="drow"><span class="k">연락처</span><span class="v">${c.phone}</span></div>
       <div class="drow"><span class="k">결제금액</span><span class="v">${won(c.paid)}원</span></div>
-      <div class="drow"><span class="k">구매 지점</span><span class="v">${branchOf(c.branchId).name} <span style="font-weight:400;color:var(--sub)">· 전 지점 사용 가능</span></span></div>
+      <div class="drow"><span class="k">구매 지점</span><span class="v">${branchOf(c.branchId).name} <span style="font-weight:400;color:var(--sub)">· 사용 가능: ${usableBranches(c).map((b) => b.name).join('·')}</span></span></div>
       <div class="drow"><span class="k">유효기간</span><span class="v">~ ${c.expire}</span></div>
       ${histHTML}`;
     if (st === 'available') {
@@ -546,7 +491,7 @@ function openDetail(code: string) {
       <div class="drow"><span class="k">고객명</span><span class="v">${c.name}</span></div>
       <div class="drow"><span class="k">연락처</span><span class="v">${c.phone}</span></div>
       <div class="drow"><span class="k">결제금액</span><span class="v">${won(c.paid)}원${c.origin ? ` <span style="font-weight:400;color:var(--sub);text-decoration:line-through">${won(c.origin)}원</span>` : ''}</span></div>
-      <div class="drow"><span class="k">구매 지점</span><span class="v">${branchOf(c.branchId).name} <span style="font-weight:400;color:var(--sub)">· 전 지점 사용 가능</span></span></div>
+      <div class="drow"><span class="k">구매 지점</span><span class="v">${branchOf(c.branchId).name} <span style="font-weight:400;color:var(--sub)">· 사용 가능: ${usableBranches(c).map((b) => b.name).join('·')}</span></span></div>
       <div class="drow"><span class="k">유효기간</span><span class="v">~ ${c.expire}</span></div>
       ${histHTML}`;
     if (st === 'available') {
@@ -573,7 +518,7 @@ function openDetail(code: string) {
       ${c.origin ? `<div class="drow"><span class="k">정상가</span><span class="v" style="font-weight:400;color:var(--sub);text-decoration:line-through">${won(c.origin)}원</span></div>` : ''}
       <div class="drow"><span class="k">판매가(결제)</span><span class="v">${won(c.paid)}원${d ? ` <span style="color:var(--accent-deep)">(${d}% 할인)</span>` : ''}</span></div>
       <div class="drow"><span class="k">구매일</span><span class="v">${c.buyDate}</span></div>
-      <div class="drow"><span class="k">구매 지점</span><span class="v">${branchOf(c.branchId).name} <span style="font-weight:400;color:var(--sub)">· 전 지점 사용 가능</span></span></div>
+      <div class="drow"><span class="k">구매 지점</span><span class="v">${branchOf(c.branchId).name} <span style="font-weight:400;color:var(--sub)">· 사용 가능: ${usableBranches(c).map((b) => b.name).join('·')}</span></span></div>
       <div class="drow"><span class="k">유효기간</span><span class="v">~ ${c.expire}</span></div>`;
     if (st === 'available') {
       foot = `<button class="btn-redeem" id="redeemBtn">✓ 사용처리하기</button>`;
@@ -582,6 +527,11 @@ function openDetail(code: string) {
     } else {
       foot = `<div class="status-note exp">유효기간이 지난 쿠폰이에요 (${c.expire})</div><button class="btn-redeem" disabled>사용처리 불가</button>`;
     }
+  }
+
+  // 타 사업자 쿠폰은 사용처리 차단 (검색에서 걸러지지만 방어적으로 한 번 더)
+  if (st === 'available' && !canRedeem(c)) {
+    foot = `<div class="status-note exp">이 쿠폰은 <b>${payeeOf(c)}</b> 전용이에요 (사용 지점: ${usableBranches(c).map((b) => b.name).join('·')})</div><button class="btn-redeem" disabled>사용처리 불가</button>`;
   }
 
   $('ticketBox').innerHTML = `
@@ -718,7 +668,9 @@ function refreshAll() {
 const typeBadgeByType = (t: string) => TYPE_BADGE[t] || TYPE_BADGE.service;
 
 function renderSettlement() {
-  const lines = settleLines(coupons);
+  // 정산은 사용처리 지점 귀속 → 계정 스코프 지점의 라인만
+  const ids = allowedIds();
+  const lines = settleLines(coupons).filter((l) => ids.has(l.branchId));
   const totalSettle = lines.reduce((s, l) => s + l.settle, 0);
   const doneSum = lines.filter((l) => l.payout <= today).reduce((s, l) => s + l.settle, 0);
   const pendingSum = lines.filter((l) => l.payout > today).reduce((s, l) => s + l.settle, 0);
@@ -830,7 +782,8 @@ function download(filename: string, text: string) {
   URL.revokeObjectURL(url);
 }
 function renderStatements() {
-  const lines = settleLines(coupons);
+  const ids = allowedIds();
+  const lines = settleLines(coupons).filter((l) => ids.has(l.branchId));
   type Item = { usedAt: string; code: string; product: string; branch: string; usedAmount: number; settle: number };
   type Stmt = { key: string; date: string; payee: string; kind: 'direct' | 'franchise'; total: number; usolMonth: string; items: Item[] };
   // 명세서는 지급 단위 = (지급일 × 정산주체) — 직영은 본사 1건 합산, 가맹은 각자 1건

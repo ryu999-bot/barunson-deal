@@ -26,19 +26,20 @@
 | **업체 (vendor)** | 이메일 회원가입/로그인 | 판매현황·쿠폰 사용처리·정산·명세서·문자이력·업체정보·권한·문의·약관 |
 | **바른손카드 직원 (staff)** | Google 로그인(내부) | 운영 대시보드·직원 콘솔(권한 승인/공지)·약관 |
 
-- **권한 게이팅:** 업체는 `vendorAccess`가 `granted`가 되기 전까지 운영 메뉴(판매현황·사용처리·문자이력·정산·명세서) 잠금.
+- **계정 발급제:** 자가 가입 없음 — 바른손카드가 사업자별 계정 발급(F-02). 발급 계정은 즉시 전 메뉴 사용 가능.
 - **역할 게이팅:** 메뉴는 `data-role`로 역할별 노출. 직원 전용 화면(운영 대시보드·직원 콘솔)은 vendor 접근 차단.
+- **지점 스코프:** vendor 계정의 판매현황·정산·명세서·사용처리 검색 모두 **자기 사업자(정산주체) 쿠폰만** 표시. 타 사업자 쿠폰 검색 시 사용 가능 지점 안내만 노출.
 
 ## 3. 기능 요구사항
 
-### F-01 인증/계정
-- 이메일 회원가입: 이름(담당자), 이메일, **비밀번호(8자 이상 + 특수문자)+확인**, 연락처, **사업자등록번호**, **사업자등록증 첨부**.
+### F-01 인증/계정 — 발급제 (자가 회원가입 없음)
+- **바른손카드가 사업자(정산주체)별로 아이디/비밀번호를 발급**한다. 업체 셀프 가입·권한 신청 플로우 없음.
 - 이메일 로그인, **Google 로그인(직원 전용, role=staff)**, 세션 유지(재방문 자동 로그인), 로그아웃.
+- 계정에는 **지점 스코프(`branchIds`)**가 묶임 — 본사 사업자 계정=직영 지점들, 가맹 사업자 계정=자기 지점. 처리 지점 선택지·판매현황·정산 조회 범위가 계정으로 결정됨(지점 1개면 처리 지점 고정).
 
-### F-02 업체 권한(가맹점 연동)
-- 업체: 사업자 정보 제출 → `pending` → 직원 승인 시 `granted`.
-- 직원: 직원 콘솔에서 업체 목록·신청 검토 → **승인/반려**.
-- 승인 지점이 **회원↔가맹점(MID) 매핑**의 확정점(연동 시 MID 연결).
+### F-02 계정 발급 (직원 콘솔)
+- 직원이 사업자명(정산주체)·사업자번호·담당자·아이디·초기 비밀번호·운영 지점(복수 선택)을 입력해 **계정 발급**.
+- 발급 계정 목록 조회·**회수**(즉시 로그인 차단). 계정↔사업자↔지점 매핑이 판매분·정산 연동의 확정점.
 
 ### F-03 판매현황 (업체)
 - 집계 KPI: 누적 판매, 사용 완료, 오늘 사용처리, 확정 매출.
@@ -50,7 +51,7 @@
 - **일반 쿠폰:** 1회 사용처리(판매가 전액).
 - **금액형 자유이용권:** 사용액 입력 후 **차감**(잔액·차감 내역 표시, 잔액 0이면 소멸).
 - **다회권(횟수형):** 사용 회수 입력(기본 1회, 다인 동반 시 복수 회차) 후 **차감**(잔여 회수·회차 내역 표시, 잔여 0이면 소멸).
-- **처리 지점 선택(다지점):** 쿠폰은 전 지점 사용 가능. 사용처리·차감 시 처리 지점이 기록되며 정산 귀속 기준이 됨(§5.2). 정식 연동 시 지점 계정별로 자동 지정.
+- **처리 지점(다지점):** 쿠폰은 판매 사업자의 지점에서만 사용 가능(§5.2). 처리 지점은 계정 스코프 내 선택(직영 계열)이거나 고정(가맹). 사용처리·차감 시 처리 지점이 기록되며 정산 귀속 기준.
 - 사용/차감 즉시 **고객 알림 문자 발송**(F-06, 서명 = 브랜드+처리 지점).
 
 ### F-05 정산 (업체) — §5.1·§5.2
@@ -93,10 +94,9 @@ Coupon { code, type, product, name, phone, buyDate, expire, paid,
 UsageEntry { date, amount, branchId? }     // branchId = 차감 처리 지점(정산 귀속)
 
 Role = 'vendor' | 'staff'
-VendorAccess = 'none' | 'pending' | 'granted'
-User { email, name, provider('email'|'google'), role, pw?, phone?, bizNo?, certName?,
-       vendorAccess, vendorName?, request?: AccessRequest, profile?: VendorProfile }
-AccessRequest { vendorName, bizNo, manager, phone, at }
+User { email, name, provider('email'|'google'), role, pw?, phone?, bizNo?,
+       vendorName?(사업자명=정산주체), branchIds?(지점 스코프), issuedAt?, profile?: VendorProfile }
+IssueInput { email, name, pw, vendorName, bizNo?, branchIds }  // 직원 계정 발급
 VendorProfile { bank, account, holder, company, ceo, addr, bizType, bizItem, taxEmail, phone }
 
 SmsEntry { at, phone, message, kind('redeem'|'deduct'|'used-up') }
@@ -117,10 +117,13 @@ PayeeGroup { payee, kind, branchNames, count, total }  // 정산주체별 합산
 - **미사용분은 정산하지 않음**(쓴 만큼만) → 환불로 인한 **업체 역정산(환수) 없음**.
 - 산출 함수: `domain.settleLines(coupons)`, 지급일 `domain.payoutDate(usedAt)`.
 
-### 5.2 다지점(직영·가맹) 정산
-- **전제:** 전 지점 동일 상품·동일가 → 쿠폰은 구매 지점과 관계없이 **전 지점 사용 가능**. 구매 시 대표 지점(`branchId`) 기록.
-- **귀속 규칙:** 정산 라인은 **사용처리한 지점**(`usedBranchId` / `history[].branchId`)에 귀속. 구매 지점 아님.
-- **지급:** 지점 → 정산주체(payee) 매핑. 직영점 사용분은 **본사 계좌로 합산 지급**, 가맹점 사용분은 **각 가맹점 계좌로 개별 지급**(플랫폼 직접 지급 — 본사 경유 재분배 없음). 세금계산서도 사업자별 발행.
+### 5.2 다지점(직영·가맹) 사용 범위와 정산
+- **사용 범위 규칙 (2026-07-07 확정):** 쿠폰은 **판매 지점(`branchId`)을 운영하는 사업자(정산주체)의 지점에서만 사용 가능**.
+  - 직영 계열(사업자 1개·지점 다수): 직영 지점 간 **교차 사용 가능** — 처리 지점만 선택.
+  - 가맹점 쿠폰: **해당 가맹점 전용**. 타 사업자 계정으로는 조회는 되지 않고(사용처리 검색이 사업자 스코프), 안내 문구 표시.
+  - 구현: `payeeOf(coupon)` ∈ 계정의 payee 집합(`canRedeem`) — 검색 필터 + 상세 가드 이중 차단.
+- **귀속 규칙:** 정산 라인은 **사용처리한 지점**(`usedBranchId` / `history[].branchId`)에 귀속(직영 계열 내 지점별 실적 구분용).
+- **지급:** 지점 → 정산주체(payee) 매핑. 직영 사용분은 **본사 계좌로 합산 지급**, 가맹 사용분은 **각 가맹점 계좌로 개별 지급**(플랫폼 직접 지급 — 본사 경유 재분배 없음). 세금계산서도 사업자별 발행.
 - 산출 함수: `domain.groupByPayee(settleLines)`. 지점 데이터: `config.BRANCHES`, `config.branchOf(id)`.
 
 ### 5.3 환불 정책 (컴플라이언트) — 결제액 기준
@@ -158,8 +161,8 @@ PayeeGroup { payee, kind, branchNames, count, total }  // 정산주체별 합산
 | `api.getOpsStats()` | `GET /api/ops/stats` |
 | `api.listNotices/addNotice/deleteNotice` | `GET/POST/DELETE /api/notices` |
 | `api.sendInquiry()` | `POST /api/inquiries` (현 mailto) |
-| `auth.signup/login/loginWithGoogle` | `POST /api/auth/*` (세션/JWT), Google ID 토큰 서버 검증 |
-| `auth.requestVendorAccess/approveVendor` | `POST /api/vendor-access` (+ MID 매핑) |
+| `auth.login/loginWithGoogle` | `POST /api/auth/*` (세션/JWT), Google ID 토큰 서버 검증 |
+| `auth.issueAccount/revokeAccount` | `POST/DELETE /api/partner-accounts` (직원 콘솔, 사업자별 발급) |
 | `auth.updateProfile` | `PUT /api/vendor/profile` |
 | 정산 산출/명세 | `GET /api/settlement?period=` (`domain.settleLines` 로직 서버 이전) |
 
