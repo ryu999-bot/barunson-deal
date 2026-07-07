@@ -19,6 +19,8 @@
 | **파트너 어드민** (본 제품) | `ryu999-bot/barunson-deal` | 업체·직원 운영 콘솔 | 현: Vite+바닐라TS / 목표: donald-duck 정렬 |
 | **바른손카드 플랫폼** | `barunntechnicaloffice/donald-duck` | 회사 표준 이커머스 플랫폼 (청첩장·답례품·꽃·굿즈). **흡수 대상** | NestJS 11 + Next.js 15 + Prisma/Postgres |
 | **바른손카드 레거시 DB** | `starlog/barunson-database-reference` | 결제·쿠폰 발급·정산의 **단일 진실원천**(source of truth) | MSSQL Azure(barunson/bar_shop1), MySQL(DD) |
+| **바른 ERP** | `barunntechnicaloffice/erp-backend` | **정산 지급·세금계산서·회계** — 월 마감 정산 데이터의 최종 목적지 | (레포 참조) |
+| **바른손 백오피스** | bbarunsonweb.barunsoncard.com/Company | **업체 등록·계정·수수료율 마스터** → ERP 업체 마스터 연동 | (기존 운영 시스템) |
 
 - **관계:** 파트너 어드민과 donald-duck은 **같은 운영사의 다른 제품 라인**. 어드민은 스택 정렬 후 donald-duck에 도메인으로 흡수.
 - **데이터 원천:** 쿠폰 상태·정산 금액의 계산 주체는 **바른손카드 1곳**. 어드민은 뷰 + 사용처리 트리거.
@@ -230,9 +232,9 @@ TB_Lounge_Settlement(Settlement_ID PK, Payee_Branch_ID, Usage_Month /*'2026-06'*
 3. **잔액 = 원장 합계:** `Face_Value - SUM(Usage_Amount)`. `Used_Amount`는 성능 캐시, 진실은 원장.
 
 ## 14. 미해결 결정 (Open Questions)
-1. **정산 지급 주체** — (A) 바른손카드 이체 대행 vs (B) 운영사 직접(펌뱅킹).
-2. **정산 계산 주체** — 서버 계산(권장) vs 어드민. 수수료율(계약 제5조) 관리 위치.
-3. **정산 연동 인터페이스** — REST / 배치(EDI·전문) / 공용 DB.
+1. **정산 지급 주체** — 방향 확정(2026-07-07): 월 마감 정산 데이터를 **바른 ERP(erp-backend)로 연동**해 지급·세금계산서·회계 처리. ERP 측 수신 인터페이스(API/배치) 상세 확정 필요.
+2. **정산 계산 주체** — 서버 계산(권장) vs 어드민. **수수료율 원천 = bbarunsonweb /Company 업체 마스터**(ERP 연동) — 정산 계산 시 참조 경로 확정 필요.
+3. **정산 연동 인터페이스** — REST / 배치(EDI·전문) / 공용 DB. (ERP·본사 DB 각각)
 4. **결제 데이터 원본** — 주문·취소·환불 수신 구조 확정.
 5. **인증 방식** — 본사 통합 계정(SSO/JWT) vs 파트너 전용. 직원 Google 로그인 유지 여부.
 6. **알림** — SMS vs 카카오 알림톡, 발송 주체, 템플릿 사전승인.
