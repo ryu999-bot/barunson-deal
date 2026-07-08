@@ -6,8 +6,8 @@
 //  목 처리 부분을 fetch('/api/...') 호출로 바꾸기만 하면 됩니다.
 //  (함수 시그니처/반환 타입은 그대로 유지)
 // ============================================================
-import type { Coupon, InquiryInput, SmsEntry, Notice, OpsVendorStat } from './types';
-import { VENDOR, BRAND, branchOf, todayStr, stamp } from './config';
+import type { Coupon, InquiryInput, SmsEntry, Notice, OpsVendorStat, Branch, BranchKind } from './types';
+import { VENDOR, BRAND, BRANCHES, branchOf, todayStr, stamp } from './config';
 import { balanceOf } from './domain';
 
 // 지점 표기: '더마린클리닉 강남점'
@@ -80,6 +80,26 @@ export const api = {
     // 연동(확정): GET /api/Lounge/vouchers/search?code|phone4|name — Bearer 토큰(POST /api/Partner/authenticate)
     //   서버가 검색·PII 마스킹·업체 스코프 필터 수행. 상세: 바른라운지_API_핸드오버.md
     return COUPONS.slice();
+  },
+
+  /** 지점 목록 조회 */
+  async listBranches(): Promise<Branch[]> {
+    await delay();
+    // 연동(확정): GET /api/Lounge/branches — Bearer 스코프 토큰(POST /api/Lounge/auth/scope).
+    //   응답 [{branchId, branchName, branchKind, phone, addr, useYN}] (업체 스코프). 상세: 바른라운지_API_핸드오버.md
+    return BRANCHES.slice();
+  },
+
+  /** 지점 등록 — 정산주체(payee)는 서버가 로그인 업체로 자동 지정 */
+  async addBranch(input: { name: string; kind: BranchKind; phone?: string; addr?: string }): Promise<Branch> {
+    await delay();
+    const id = (input.name.replace(/\s+/g, '') || 'br') + '-' + Date.now().toString(36);
+    const payee = input.kind === 'franchise' ? `${BRAND} ${input.name}(가맹)` : `(주)${BRAND} 본사`;
+    const branch: Branch = { id, name: input.name, kind: input.kind, payee };
+    BRANCHES.push(branch);
+    // 연동(확정): POST /api/Lounge/branches  body {branchName, branchKind, branchPhone, branchAddr}
+    //   → 응답 {branchId}. 이 branchId를 지점 로그인 계정에 매핑. 정산주체=토큰 스코프 업체 자동.
+    return branch;
   },
 
   /** 일반 쿠폰 사용처리 — branchId: 처리 지점(정산 귀속) */

@@ -1,5 +1,5 @@
 import './style.css';
-import type { Coupon } from './types';
+import type { Coupon, BranchKind } from './types';
 import { VENDOR, BRAND, BRANCHES, branchOf, PAYOUT_DAY, BASE_DATE, todayStr, ymd, won, GOOGLE_CLIENT_ID } from './config';
 import { balanceOf, realStatus, STATUS_META, discPct, refundDue, settleLines, groupByPayee } from './domain';
 import { api } from './api';
@@ -155,6 +155,7 @@ function showView(v: string) {
   if (v === 'statements') renderStatements();
   if (v === 'settings') renderSettings();
   if (v === 'notice') renderNotice();
+  if (v === 'branches') renderBranches();
   if (v === 'redeem') $('searchInput').focus();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -268,6 +269,30 @@ async function renderStaffNotices() {
   }));
 }
 document.querySelectorAll('.nav-item').forEach((b) => ((b as HTMLElement).onclick = () => showView((b as HTMLElement).dataset.view!)));
+
+/* ================= 지점 관리 ================= */
+async function renderBranches() {
+  const list = await api.listBranches();
+  $('branchList').innerHTML = list.length
+    ? `<table class="tbl"><thead><tr><th>지점명</th><th>구분</th><th>정산주체(payee)</th></tr></thead><tbody>${list
+        .map((b) => `<tr><td>${b.name}</td><td>${b.kind === 'franchise' ? '가맹' : '직영'}</td><td>${b.payee}</td></tr>`)
+        .join('')}</tbody></table>`
+    : `<p class="desc">등록된 지점이 없습니다. 위에서 지점을 등록하세요.</p>`;
+}
+(document.getElementById('branchForm') as HTMLFormElement | null)?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const g = (id: string) => ($(id) as HTMLInputElement).value.trim();
+  const name = g('brName');
+  if (!name) { toast('⚠️ 지점명을 입력하세요'); return; }
+  const kind = ($('brKind') as HTMLSelectElement).value as BranchKind;
+  await api.addBranch({ name, kind, phone: g('brPhone'), addr: g('brAddr') });
+  toast('✓ 지점을 등록했어요');
+  ($('brName') as HTMLInputElement).value = '';
+  ($('brPhone') as HTMLInputElement).value = '';
+  ($('brAddr') as HTMLInputElement).value = '';
+  initBranchSel();   // 처리 지점 셀렉터 갱신
+  renderBranches();
+});
 
 /* ================= Row HTML ================= */
 const maskPhone = (p: string) => p.replace(/(\d{3})-(\d{2})\d{2}-(\d{4})/, '$1-$2**-$3');

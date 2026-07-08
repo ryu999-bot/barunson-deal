@@ -55,6 +55,7 @@
       <div class="nav-sec" data-role="vendor">운영</div>
       <button class="nav-item" data-view="dashboard" data-role="vendor"><span class="ni">▤</span> 판매현황</button>
       <button class="nav-item" data-view="redeem" data-role="vendor"><span class="ni">◎</span> 쿠폰 사용처리</button>
+      <button class="nav-item" data-view="branches" data-role="vendor"><span class="ni">🏬</span> 지점 관리</button>
       <button class="nav-item" data-view="sms" data-role="vendor"><span class="ni">💬</span> 알림 문자 이력</button>
       <div class="nav-sec" data-role="vendor">정산</div>
       <button class="nav-item" data-view="settlement" data-role="vendor"><span class="ni">₩</span> 정산 관리</button>
@@ -379,6 +380,29 @@
         <div class="page-head"><h1>공지사항</h1><p>바른손카드에서 입점 업체에 전하는 공지입니다.</p></div>
         <div class="panel">
           <div id="noticeList"></div>
+        </div>
+      </section>
+
+      <!-- ===== 지점 관리 ===== -->
+      <section class="view" id="view-branches">
+        <div class="page-head"><h1>지점 관리</h1><p>매장(지점)을 등록·관리합니다. 등록한 지점은 쿠폰 사용처리 시 처리 지점으로 선택됩니다.</p></div>
+        <div class="panel">
+          <h2>지점 등록</h2>
+          <p class="desc">지점명·구분을 입력해 지점을 등록합니다. 정산주체는 로그인한 업체로 자동 지정됩니다.</p>
+          <form id="branchForm">
+            <div class="form-grid">
+              <div class="field"><label>지점명</label><input id="brName" type="text" placeholder="예: 강남점" /></div>
+              <div class="field"><label>구분</label><select id="brKind"><option value="direct">직영</option><option value="franchise">가맹</option></select></div>
+              <div class="field"><label>연락처</label><input id="brPhone" type="text" placeholder="02-000-0000 (선택)" /></div>
+              <div class="field"><label>주소</label><input id="brAddr" type="text" placeholder="주소 (선택)" /></div>
+            </div>
+            <button class="btn-primary" type="submit" style="max-width:220px;margin-top:var(--sp-4)">지점 등록</button>
+          </form>
+        </div>
+        <div class="panel">
+          <h2>지점 목록</h2>
+          <p class="desc">등록된 지점 목록입니다. 쿠폰 사용처리의 처리 지점 선택에 사용됩니다.</p>
+          <div id="branchList"></div>
         </div>
       </section>
 
