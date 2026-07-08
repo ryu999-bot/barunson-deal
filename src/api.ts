@@ -77,7 +77,8 @@ export const api = {
   /** 발급 쿠폰 전체 조회 */
   async listCoupons(): Promise<Coupon[]> {
     await delay();
-    // 연동: return (await fetch('/api/coupons')).json();
+    // 연동(확정): GET /api/Lounge/vouchers/search?code|phone4|name — Bearer 토큰(POST /api/Partner/authenticate)
+    //   서버가 검색·PII 마스킹·업체 스코프 필터 수행. 상세: 바른라운지_API_핸드오버.md
     return COUPONS.slice();
   },
 
@@ -90,7 +91,8 @@ export const api = {
     c.usedAt = stamp();
     c.usedBranchId = branchId;
     c.usedBy = branchName(branchId);
-    // 연동: await fetch(`/api/coupons/${code}/redeem`, { method: 'POST', body: JSON.stringify({ branchId }) });
+    // 연동(확정): POST /api/Lounge/vouchers/{code}/redeem  body {branchId}
+    //   헤더 Idempotency-Key(UUID) 필수. 409=이미 사용, 403=타 업체 스코프. 응답 {usageId, status}
     return c;
   },
 
@@ -107,7 +109,8 @@ export const api = {
       c.usedBranchId = branchId;
       c.usedBy = branchName(branchId);
     }
-    // 연동: await fetch(`/api/coupons/${code}/deduct`, { method: 'POST', body: JSON.stringify({ amount, branchId }) });
+    // 연동(확정): POST /api/Lounge/vouchers/{code}/deduct  body {branchId, amount}
+    //   금액형 amount=원, 횟수형 amount=회. Idempotency-Key 필수. 422=잔여 초과. 응답 {usageId, balance, status}
     return c;
   },
 
@@ -124,7 +127,8 @@ export const api = {
     await delay();
     console.log(`[SMS] → ${phone}\n${message}`);
     SMS_LOG.unshift({ at: stamp(), phone, message, kind });
-    // 연동 지점: 실제 SMS 게이트웨이 호출
+    // 연동(확정): 어드민 직접 발송 없음 — 사용/차감 성공 시 bar_shop1 서버가 자동 발송.
+    //   연동 시 이 함수 호출 제거(또는 no-op). 발송 이력 API는 미제공 — 연동_명세 §6-4 회신 대기.
   },
 
   /** 알림 문자 발송 이력 (최신순) */

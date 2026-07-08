@@ -93,20 +93,20 @@ PayeeGroup { payee, kind, branchNames, count, total }  // 정산주체별 합산
 | 알림 | Notification 엔진(SMS/카카오 알림톡) |
 | 인프라 | Docker Compose(로컬), 정적/컨테이너 배포 |
 
-### 4.3 연동 계층(Seam) — 목 → 실제 API 매핑
-| 현행(목) | 실제 연동 |
+### 4.3 연동 계층(Seam) — 목 → 실제 API 매핑 (2026-07-08 핸드오버 확정: bar_shop1 PublicApi)
+> 인증: `POST /api/Partner/authenticate`(clientId `thelounge`) → Bearer + refresh. 토큰 스코프 = 업체(정산주체), 서버 강제(403). 상세: [바른라운지_API_핸드오버.md](../바른라운지_API_핸드오버.md)
+
+| 현행(목) | 확정 연동 |
 |----------|-----------|
-| `api.listCoupons()` | `GET /partner/v1/vouchers` (바른손 발급·상태 동기화, **사업자 스코프**) |
-| `api.redeem(code,branchId)` / `deduct(code,amount,branchId)` | `POST /partner/v1/vouchers/{code}/redeem` · `/deduct` (**멱등키 필수 + 사업자 스코프 검증**, 409=이미사용, 422=잔여초과) |
-| `api.sendSms()` | 본사 사용처리 이벤트 후킹 자동 발송 or `POST /sms` |
-| `api.getOpsStats()` | `GET /partner/v1/ops/stats` |
-| `api.listNotices/addNotice/deleteNotice` | `GET/POST/DELETE /partner/v1/notices` |
-| `api.sendInquiry()` | `POST /partner/v1/inquiries` (현 mailto) |
-| `auth.login/loginWithGoogle` | `POST /auth/*` (세션/JWT), Google ID 토큰 서버 검증 |
-| `auth.issueAccount/revokeAccount` | `POST/DELETE /partner/v1/accounts` (직원 콘솔 — 사업자별 계정 발급/회수, 자가 가입 없음) |
-| `auth.updateProfile` | `PUT /partner/v1/vendor/profile` |
-| 정산 산출/명세 | `GET /partner/v1/settlements?month=` (`domain.settleLines` 서버 이전) |
-| (신규) 환불 반영 | 웹훅 `voucher.refunded` 또는 폴링 |
+| `api.listCoupons()`/검색 | `GET /api/Lounge/vouchers/search?code|phone4|name` (서버 검색·PII 마스킹·스코프 필터) |
+| `api.redeem(code,branchId)` | `POST /api/Lounge/vouchers/{code}/redeem` (**Idempotency-Key 필수**, 409=이미사용) |
+| `api.deduct(code,amount,branchId)` | `POST /api/Lounge/vouchers/{code}/deduct` (금액형=원/횟수형=회, 422=잔여초과) |
+| (신규) 지점 관리 F-13 | `POST/GET/PUT /api/Lounge/branches` — `config.BRANCHES` 하드코딩 대체 |
+| `api.sendSms()` | **제거** — 사용/차감 성공 시 bar_shop1 서버가 자동 발송 |
+| `auth.*` (계정 발급/회수/로그인) | **어드민 자체 백엔드** (bar API 범위 아님 — M1 NestJS에서 구현) |
+| `api.getOpsStats()`·공지·문의 | 어드민 자체 백엔드 (M1) |
+| 정산 산출/명세 | **미확정** — 사용 원장 조회 API 또는 ERP 조회 필요 (연동_명세 §6-1·2) |
+| 환불 반영 | **미확정** — 웹훅/폴링 미제공, 조회 시 REFUNDED로만 확인 (연동_명세 §6-5) |
 
 ## 5. 외부 연동
 - **인증:** Google OAuth 2.0(직원용) + 이메일/비밀번호.
