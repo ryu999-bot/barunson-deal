@@ -4,11 +4,12 @@
 //  지금은 브라우저 localStorage 기반 목(mock)입니다.
 //  ⚠ 비밀번호를 평문 저장하므로 데모 전용입니다.
 //
-//  계정 정책: 자가 회원가입 없음. 바른손카드가 사업자(정산주체)별로
-//  아이디/비밀번호를 발급한다. 계정에는 지점 스코프(branchIds)가
-//  묶여 있어 처리 지점·정산 조회 범위가 계정으로 결정된다.
-//   - 본사 사업자 계정: 직영 지점들 (예: 강남·홍대)
-//   - 가맹 사업자 계정: 해당 가맹 지점
+//  계정 정책 (2026-07-09 개정): 사업자(정산주체) 단위 "회원가입 + 직원 승인제".
+//   - 업체가 사업자 정보(사업자명·번호·등록증)로 가입 → 승인 대기(approved=false)
+//   - 바른손카드 직원이 직원 콘솔에서 승인하면 전 메뉴 사용 가능
+//   - 직원이 직접 발급(issueAccount)하는 경로도 병행 (즉시 사용)
+//  계정에는 지점 스코프가 묶임: 발급 시 branchIds + 지점 관리(F-13)에서
+//  등록한 자기 사업자(payee=vendorName) 지점. 처리 지점·정산 조회 범위가 계정으로 결정.
 //
 //  바른손카드 백엔드 연동 시:
 //   - login → POST /api/auth/login (세션/JWT 쿠키)
@@ -29,9 +30,12 @@ export interface User {
   pw?: string;           // 데모 전용(평문). 연동 시 제거.
   phone?: string;
   bizNo?: string;
+  certName?: string;     // 사업자등록증 첨부 파일명(실제 파일은 서버 업로드)
   vendorName?: string;   // 사업자명(정산주체) — 예: (주)더마린 본사 / 더마린 분당점(가맹)
   branchIds?: string[];  // 이 계정이 운영하는 지점 스코프 (vendor 전용)
-  issuedAt?: string;     // 계정 발급일
+  issuedAt?: string;     // 계정 발급/가입일
+  // 가입 승인 상태 — false=승인 대기(메뉴 잠금). undefined는 직원 발급 계정(즉시 사용)으로 간주.
+  approved?: boolean;
   profile?: VendorProfile;
 }
 
@@ -42,6 +46,17 @@ export interface IssueInput {
   vendorName: string;  // 사업자명
   bizNo?: string;
   branchIds: string[];
+}
+
+/** 사업자 단위 회원가입 입력 — 가입 후 바른손카드 직원 승인 시 사용 가능 */
+export interface SignupInput {
+  email: string;
+  name: string;        // 담당자명
+  pw: string;
+  vendorName: string;  // 사업자명(정산주체)
+  bizNo: string;
+  phone: string;
+  certName: string;    // 사업자등록증 파일명
 }
 
 const USERS_KEY = 'glowdeal_users_v2'; // v2: 발급제 전환 (구 가입제 데이터와 분리)
@@ -88,7 +103,45 @@ export const auth = {
     return getUsers()[email] || null;
   },
 
-  /** 로그인 — 계정은 바른손카드가 사업자별로 발급 (자가 가입 없음) */
+  /** 사업자 단위 회원가입 → 승인 대기(approved=false). 직원 승인 후 전 메뉴 사용 가능 */
+  async signup(input: SignupInput): Promise<User> {
+    await delay();
+    const key = norm(input.email);
+    const users = getUsers();
+    if (users[key]) throw new Error('EXISTS');
+    const user: User = {
+      email: key, name: input.name, provider: 'email', role: 'vendor',
+      pw: input.pw, phone: input.phone, bizNo: input.bizNo, certName: input.certName,
+      vendorName: input.vendorName, branchIds: [],
+      issuedAt: new Date().toISOString().slice(0, 10),
+      approved: false,
+    };
+    users[key] = user;
+    setUsers(users);
+    save(SESSION_KEY, key);
+    return user;
+  },
+
+  /** 직원: 가입 승인 — 승인 즉시 전 메뉴 사용 가능 */
+  async approveVendor(email: string): Promise<User> {
+    await delay();
+    const users = getUsers();
+    const u = users[norm(email)];
+    if (!u) throw new Error('NOT_FOUND');
+    u.approved = true;
+    setUsers(users);
+    return u;
+  },
+
+  /** 직원: 가입 반려 — 계정 삭제 */
+  async rejectVendor(email: string): Promise<void> {
+    await delay();
+    const users = getUsers();
+    delete users[norm(email)];
+    setUsers(users);
+  },
+
+  /** 로그인 — 회원가입(승인제) 또는 직원 발급 계정 */
   async login(email: string, pw: string): Promise<User> {
     await delay();
     const key = norm(email);

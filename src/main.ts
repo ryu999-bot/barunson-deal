@@ -62,17 +62,53 @@ function visibleCoupons(): Coupon[] {
   return coupons.filter((c) => payees.has(payeeOf(c)));
 }
 
-/* ================= Auth (로그인 — 계정은 바른손카드가 사업자별 발급) ================= */
+/* ================= Auth (로그인 / 사업자 회원가입 — 직원 승인제) ================= */
+let authMode: 'login' | 'signup' = 'login';
+function setAuthMode(mode: 'login' | 'signup') {
+  authMode = mode;
+  document.querySelectorAll('#authTabs .tab').forEach((x) => x.classList.toggle('on', (x as HTMLElement).dataset.auth === mode));
+  const signup = mode === 'signup';
+  $('signupBiz').style.display = signup ? 'block' : 'none';
+  $('signupExtra').style.display = signup ? 'block' : 'none';
+  ($('auPw') as HTMLInputElement).placeholder = signup ? '8자 이상, 특수문자 포함' : '비밀번호';
+  $('authSubmit').textContent = signup ? '회원가입' : '로그인';
+}
+$('authTabs').onclick = (e) => {
+  const t = (e.target as HTMLElement).closest('.tab') as HTMLElement;
+  if (t) setAuthMode(t.dataset.auth as 'login' | 'signup');
+};
+
+// 비밀번호 규칙: 8자 이상 + 특수문자 포함
+const pwValid = (pw: string) => pw.length >= 8 && /[^A-Za-z0-9]/.test(pw);
+
 $('authForm').onsubmit = async (e) => {
   e.preventDefault();
   const email = ($('auEmail') as HTMLInputElement).value.trim();
   const pw = ($('auPw') as HTMLInputElement).value;
   if (!email || !pw) { toast('⚠️ 아이디와 비밀번호를 입력하세요'); return; }
   try {
-    user = await auth.login(email, pw);
+    if (authMode === 'signup') {
+      const vendorName = ($('suVendor') as HTMLInputElement).value.trim();
+      const bizNo = ($('suBiz') as HTMLInputElement).value.trim();
+      const name = ($('suName') as HTMLInputElement).value.trim();
+      const phone = ($('suPhone') as HTMLInputElement).value.trim();
+      const pw2 = ($('auPw2') as HTMLInputElement).value;
+      const certFile = ($('suCert') as HTMLInputElement).files?.[0];
+      if (!vendorName) { toast('⚠️ 사업자명(상호)을 입력하세요'); return; }
+      if (!bizNo) { toast('⚠️ 사업자등록번호를 입력하세요'); return; }
+      if (!name) { toast('⚠️ 담당자명을 입력하세요'); return; }
+      if (!phone) { toast('⚠️ 연락처를 입력하세요'); return; }
+      if (!pwValid(pw)) { toast('⚠️ 비밀번호는 8자 이상이며 특수문자를 포함해야 해요'); return; }
+      if (pw !== pw2) { toast('⚠️ 비밀번호가 일치하지 않아요'); return; }
+      if (!certFile) { toast('⚠️ 사업자등록증을 첨부하세요'); return; }
+      user = await auth.signup({ email, name, pw, vendorName, bizNo, phone, certName: certFile.name });
+    } else {
+      user = await auth.login(email, pw);
+    }
     await enterApp();
-  } catch {
-    toast('⚠️ 아이디 또는 비밀번호가 올바르지 않아요. 계정 문의: jungmin.kim@barunn.net');
+  } catch (err: any) {
+    if (err?.message === 'EXISTS') toast('⚠️ 이미 가입된 이메일이에요. 로그인해 주세요');
+    else toast('⚠️ 아이디 또는 비밀번호가 올바르지 않아요. 문의: jungmin.kim@barunn.net');
   }
 };
 
@@ -104,6 +140,9 @@ if (GOOGLE_CLIENT_ID) {
   window.setTimeout(() => clearInterval(iv), 4000);
 } else { initGoogle(); }
 
+// 가입 후 미승인 상태 — 승인 대기 화면만 사용 가능
+const isPending = () => user?.role === 'vendor' && user.approved === false;
+
 async function enterApp() {
   if (!user) return;
   $('authView').style.display = 'none';
@@ -112,23 +151,43 @@ async function enterApp() {
   renderUserBar();
   applyRole();
   initBranchSel();
+  applyPendingLock();
   await reload();
-  showView(user.role === 'staff' ? 'ops' : 'dashboard');
+  showView(user.role === 'staff' ? 'ops' : isPending() ? 'pending' : 'dashboard');
 }
 
-// 처리 지점 셀렉터를 계정 스코프로 제한 — 지점이 1개면 고정(변경 불가)
+// 미승인 업체는 메뉴 잠금 표시(약관 안내 제외)
+function applyPendingLock() {
+  const lock = isPending();
+  document.querySelectorAll<HTMLElement>('.nav-item').forEach((el) => {
+    el.classList.toggle('locked', lock && el.dataset.view !== 'guide');
+  });
+}
+
+// 처리 지점 셀렉터를 계정 스코프로 제한 — 지점이 1개면 고정(변경 불가), 없으면 등록 안내
 function initBranchSel() {
   const sel = $('branchSel') as HTMLSelectElement;
   const list = allowedBranches();
-  branch = list[0];
-  sel.innerHTML = list.map((b) => `<option value="${b.id}">${b.name} · ${b.kind === 'franchise' ? '가맹' : '직영'}</option>`).join('');
-  sel.disabled = list.length === 1;
+  branch = list[0]; // 지점 미등록 시 undefined — 사용처리 시 가드에서 안내
+  sel.innerHTML = list.length
+    ? list.map((b) => `<option value="${b.id}">${b.name} · ${b.kind === 'franchise' ? '가맹' : '직영'}</option>`).join('')
+    : '<option value="">지점 없음 — 지점 관리에서 먼저 등록하세요</option>';
+  sel.disabled = list.length <= 1;
+}
+// 사용처리 전 처리 지점 확인 (신규 가입 직후 지점 미등록 상태 방지)
+function requireBranch(): boolean {
+  if (branch && allowedIds().has(branch.id)) return true;
+  toast('⚠️ 지점 관리에서 지점을 먼저 등록하세요');
+  return false;
 }
 $('logoutBtn').onclick = () => {
   auth.logout();
   user = null;
   $('adminView').style.display = 'none';
   $('authView').style.display = 'block';
+  // 로그인 탭으로 초기화 + 비밀번호 입력 비움 (가입 탭 잔존 방지)
+  setAuthMode('login');
+  ['auPw', 'auPw2'].forEach((id) => (($(id) as HTMLInputElement).value = ''));
 };
 
 function renderUserBar() {
@@ -148,6 +207,11 @@ function applyRole() {
 /* ================= Nav ================= */
 function showView(v: string) {
   if ((v === 'staff' || v === 'ops') && user?.role !== 'staff') v = 'dashboard';
+  // 미승인 업체는 승인 대기·약관 안내만 접근 가능
+  if (isPending() && v !== 'pending' && v !== 'guide') {
+    toast('🔒 바른손카드 승인 후 사용할 수 있어요');
+    v = 'pending';
+  }
   document.querySelectorAll('.view').forEach((x) => x.classList.remove('show'));
   $('view-' + v).classList.add('show');
   document.querySelectorAll('.nav-item').forEach((x) => x.classList.toggle('on', (x as HTMLElement).dataset.view === v));
@@ -160,6 +224,7 @@ function showView(v: string) {
   if (v === 'settings') renderSettings();
   if (v === 'notice') renderNotice();
   if (v === 'branches') renderBranches();
+  if (v === 'pending') renderPending();
   if (v === 'redeem') $('searchInput').focus();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -197,11 +262,35 @@ async function renderOps() {
 /* ================= 직원 콘솔 (계정 발급) ================= */
 async function renderStaff() {
   const vendors = await auth.listVendors();
-  const branchCount = new Set(vendors.flatMap((v) => v.branchIds || [])).size;
+  const pending = vendors.filter((v) => v.approved === false);
   $('staffStats').innerHTML = `
-    <div class="stat"><div class="lbl">발급 계정</div><div class="num">${vendors.length}<small> 개</small></div><div class="sub2">사업자 기준</div></div>
-    <div class="stat green"><div class="lbl">연결 지점</div><div class="num">${branchCount}<small> 곳</small></div><div class="sub2">직영+가맹</div></div>
-    <div class="stat accent"><div class="lbl">브랜드 지점</div><div class="num">${BRANCHES.length}<small> 곳</small></div><div class="sub2">등록 기준</div></div>`;
+    <div class="stat"><div class="lbl">업체 계정</div><div class="num">${vendors.length}<small> 개</small></div><div class="sub2">사업자 기준</div></div>
+    <div class="stat accent"><div class="lbl">승인 대기</div><div class="num">${pending.length}<small> 건</small></div><div class="sub2">검토 필요</div></div>
+    <div class="stat green"><div class="lbl">등록 지점</div><div class="num">${BRANCHES.length}<small> 곳</small></div><div class="sub2">직영+가맹</div></div>`;
+
+  // 가입 승인 대기 목록
+  $('pendingList').innerHTML = pending.length
+    ? `<table><thead><tr>
+        <th>사업자(정산주체)</th><th class="col-hide">아이디</th><th>사업자번호</th><th class="col-hide">연락처</th><th>첨부</th><th>처리</th>
+        </tr></thead><tbody>${pending.map((v) => `<tr>
+          <td><b>${v.vendorName || '-'}</b><div style="color:var(--sub);font-size:var(--fs-cap)">${v.name} · ${v.issuedAt || ''}</div></td>
+          <td class="col-hide">${v.email}</td>
+          <td>${v.bizNo || '-'}</td>
+          <td class="col-hide">${v.phone || '-'}</td>
+          <td>${v.certName ? `📎 ${v.certName}` : '-'}</td>
+          <td style="white-space:nowrap"><button class="btn-mini approve" data-email="${v.email}">승인</button> <button class="btn-mini ghost reject" data-email="${v.email}">반려</button></td>
+        </tr>`).join('')}</tbody></table>`
+    : `<p class="desc">대기 중인 가입 신청이 없습니다.</p>`;
+  $('pendingList').querySelectorAll('.approve').forEach((b) => ((b as HTMLElement).onclick = async () => {
+    await auth.approveVendor((b as HTMLElement).dataset.email!);
+    toast('✓ 승인했어요');
+    renderStaff();
+  }));
+  $('pendingList').querySelectorAll('.reject').forEach((b) => ((b as HTMLElement).onclick = async () => {
+    await auth.rejectVendor((b as HTMLElement).dataset.email!);
+    toast('가입을 반려했어요 (계정 삭제)');
+    renderStaff();
+  }));
 
   // 발급 폼 — 운영 지점 체크박스
   $('isBranches').innerHTML = BRANCHES.map((b) =>
@@ -225,13 +314,13 @@ async function renderStaff() {
     box.innerHTML = `<div class="no-result"><div class="ico">🗂️</div><div class="lead">발급된 계정이 없어요.</div>위에서 사업자별 계정을 발급하세요.</div>`;
   } else {
     box.innerHTML = `<table><thead><tr>
-      <th>사업자(정산주체)</th><th class="col-hide">아이디</th><th>운영 지점</th><th class="col-hide">사업자번호</th><th>발급일</th><th>처리</th>
+      <th>사업자(정산주체)</th><th class="col-hide">아이디</th><th>운영 지점</th><th class="col-hide">사업자번호</th><th>상태</th><th>처리</th>
       </tr></thead><tbody>${vendors.map((v) => `<tr>
-        <td><b>${v.vendorName || '-'}</b><div style="color:var(--sub);font-size:var(--fs-cap)">${v.name}</div></td>
+        <td><b>${v.vendorName || '-'}</b><div style="color:var(--sub);font-size:var(--fs-cap)">${v.name} · ${v.issuedAt || ''}</div></td>
         <td class="col-hide">${v.email}</td>
         <td>${(v.branchIds || []).map((id) => branchOf(id).name).join(', ') || '-'}</td>
         <td class="col-hide">${v.bizNo || '-'}</td>
-        <td>${v.issuedAt || '-'}</td>
+        <td>${v.approved === false ? '<span class="badge amount">승인대기</span>' : '<span class="badge ok">사용중</span>'}</td>
         <td><button class="btn-mini ghost revoke" data-email="${v.email}">회수</button></td>
       </tr>`).join('')}</tbody></table>`;
     box.querySelectorAll('.revoke').forEach((b) => ((b as HTMLElement).onclick = async () => {
@@ -273,6 +362,23 @@ async function renderStaffNotices() {
   }));
 }
 document.querySelectorAll('.nav-item').forEach((b) => ((b as HTMLElement).onclick = () => showView((b as HTMLElement).dataset.view!)));
+
+/* ================= 승인 대기 (가입 후 미승인) ================= */
+function renderPending() {
+  $('pendingPanel').innerHTML = `
+    <div class="access-status pending"><span class="ico">⏳</span><div><b>승인 대기 중</b> — 바른손카드가 사업자 정보를 확인하고 있어요.<br>
+    가입: <b>${user?.vendorName || ''}</b> · 사업자 ${user?.bizNo || '-'} · 담당 ${user?.name || ''} (${user?.issuedAt || ''})${user?.certName ? ` · 📎 ${user.certName}` : ''}</div></div>
+    <p class="desc">승인이 완료되면 판매현황·쿠폰 사용처리·지점 관리·정산 메뉴가 열립니다. 문의: <b>jungmin.kim@barunn.net</b></p>
+    <button class="btn-primary" id="pendingApproveDemo" style="max-width:300px">데모: 직원 승인 시뮬레이션</button>`;
+  // 데모 단독 테스트용 — 실제로는 직원 콘솔에서 승인 (연동 시 이 버튼 제거)
+  $('pendingApproveDemo').onclick = async () => {
+    user = await auth.approveVendor(user!.email);
+    applyPendingLock();
+    renderUserBar();
+    toast('✓ 승인되었어요 — 지점 관리에서 지점을 먼저 등록하세요');
+    showView('branches');
+  };
+}
 
 /* ================= 지점 관리 ================= */
 const acctLabel = (b: Branch) =>
@@ -596,7 +702,10 @@ function openDetail(code: string) {
 
   $('closeBtn').onclick = closeDetail;
   const rb = document.getElementById('redeemBtn');
-  if (rb) rb.onclick = () => askConfirm('이 쿠폰을 사용처리할까요?', `처리 지점: <b>${branch.name}</b> (${branch.kind === 'franchise' ? '가맹' : '직영'}) — 정산은 이 지점에 귀속됩니다.<br>사용처리 후에는 <b>되돌릴 수 없어요.</b> 고객 본인이 방문한 게 맞는지 확인해 주세요.`, { kind: 'redeem', code });
+  if (rb) rb.onclick = () => {
+    if (!requireBranch()) return;
+    askConfirm('이 쿠폰을 사용처리할까요?', `처리 지점: <b>${branch.name}</b> (${branch.kind === 'franchise' ? '가맹' : '직영'}) — 정산은 이 지점에 귀속됩니다.<br>사용처리 후에는 <b>되돌릴 수 없어요.</b> 고객 본인이 방문한 게 맞는지 확인해 주세요.`, { kind: 'redeem', code });
+  };
   const db = document.getElementById('deductBtn');
   if (db) {
     const inp = $('deductInput') as HTMLInputElement;
@@ -606,6 +715,7 @@ function openDetail(code: string) {
       else inp.value = String((parseInt(inp.value) || 0) + v);
     }));
     db.onclick = () => {
+      if (!requireBranch()) return;
       const amt = parseInt(inp.value) || 0;
       const bal = balanceOf(c);
       if (amt <= 0) { toast('⚠️ 차감할 금액을 입력하세요'); return; }
@@ -620,6 +730,7 @@ function openDetail(code: string) {
       inp.value = (ch as HTMLElement).dataset.v!;
     }));
     cb.onclick = () => {
+      if (!requireBranch()) return;
       const amt = parseInt(inp.value) || 0;
       const bal = balanceOf(c);
       if (amt <= 0) { toast('⚠️ 사용할 회수를 입력하세요'); return; }

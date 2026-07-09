@@ -21,14 +21,48 @@
       <h1>바른라운지 업체 관리자</h1>
       <p class="sub">바른손카드 · 업체 정산/운영 콘솔</p>
 
+      <div class="tabs" id="authTabs" style="margin:0 auto var(--sp-5);justify-content:center">
+        <button class="tab on" data-auth="login">로그인</button>
+        <button class="tab" data-auth="signup">회원가입</button>
+      </div>
+
       <form id="authForm">
+        <div id="signupBiz" style="display:none">
+          <div class="field">
+            <label for="suVendor">사업자명 (상호)</label>
+            <input id="suVendor" type="text" placeholder="예: (주)더마린 본사 / 더마린 분당점" />
+          </div>
+          <div class="field">
+            <label for="suBiz">사업자등록번호</label>
+            <input id="suBiz" type="text" placeholder="000-00-00000" />
+          </div>
+          <div class="field">
+            <label for="suName">담당자명</label>
+            <input id="suName" type="text" placeholder="예: 홍길동" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="suPhone">연락처</label>
+            <input id="suPhone" type="text" placeholder="010-0000-0000" autocomplete="tel" />
+          </div>
+        </div>
         <div class="field">
           <label for="auEmail">아이디 (이메일)</label>
-          <input id="auEmail" type="email" placeholder="발급받은 아이디" autocomplete="email" />
+          <input id="auEmail" type="email" placeholder="you@example.com" autocomplete="email" />
         </div>
         <div class="field">
           <label for="auPw">비밀번호</label>
           <input id="auPw" type="password" placeholder="비밀번호" autocomplete="current-password" />
+        </div>
+        <div id="signupExtra" style="display:none">
+          <div class="field">
+            <label for="auPw2">비밀번호 확인</label>
+            <input id="auPw2" type="password" placeholder="비밀번호 재입력" autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label for="suCert">사업자등록증 첨부</label>
+            <input id="suCert" type="file" accept="image/*,.pdf" />
+            <div class="help">이미지 또는 PDF · 바른손카드 승인 심사에 사용됩니다</div>
+          </div>
         </div>
         <button class="btn-primary" type="submit" id="authSubmit">로그인</button>
       </form>
@@ -37,7 +71,7 @@
       <div id="googleBtn"></div>
       <button class="btn-google" id="googleDemoBtn"><span class="g">G</span> 직원 Google 로그인</button>
 
-      <p class="hint" id="authHint">계정은 <b>바른손카드가 사업자별로 발급</b>합니다. 계정 발급·비밀번호 문의: <b>jungmin.kim@barunn.net</b><br><b>바른손카드 직원</b>은 Google 계정으로 로그인합니다.</p>
+      <p class="hint" id="authHint"><b>업체(사업자)</b>는 회원가입 후 바른손카드 <b>승인 완료 시</b> 이용할 수 있습니다.<br>문의: <b>jungmin.kim@barunn.net</b> · <b>바른손카드 직원</b>은 Google 계정으로 로그인합니다.</p>
     </div>
   </div>
 </div>
@@ -332,8 +366,13 @@
           </form>
         </div>
         <div class="panel">
-          <h2>발급된 계정</h2>
-          <p class="desc">발급한 사업자 계정 목록입니다. 회수하면 즉시 로그인이 차단됩니다.</p>
+          <h2>가입 승인 대기</h2>
+          <p class="desc">회원가입한 업체의 사업자 정보를 확인하고 승인/반려하세요. 승인하면 즉시 사용 가능합니다.</p>
+          <div id="pendingList"></div>
+        </div>
+        <div class="panel">
+          <h2>업체 계정 목록</h2>
+          <p class="desc">가입·발급된 사업자 계정 목록입니다. 회수하면 즉시 로그인이 차단됩니다.</p>
           <div id="staffList"></div>
         </div>
         <div class="panel">
@@ -384,6 +423,12 @@
       </section>
 
       <!-- ===== 지점 관리 ===== -->
+      <!-- ===== 승인 대기 (가입 후 미승인 업체) ===== -->
+      <section class="view" id="view-pending">
+        <div class="page-head"><h1>가입 승인 대기</h1><p>바른손카드가 사업자 정보를 확인한 뒤 승인하면 모든 메뉴를 사용할 수 있습니다.</p></div>
+        <div class="panel" id="pendingPanel"></div>
+      </section>
+
       <section class="view" id="view-branches">
         <div class="page-head"><h1>지점 관리</h1><p>매장(지점)을 등록·관리합니다. 등록한 지점은 쿠폰 사용처리 시 처리 지점으로 선택됩니다.</p></div>
         <div class="panel">
