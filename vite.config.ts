@@ -4,6 +4,7 @@ import { defineConfig } from 'vite';
 // 배포 빌드: `npm run build` → dist/ (정적 번들)
 // 컨테이너 실행: `npm start` (build 후 preview 서버, PORT 환경변수 지원)
 export default defineConfig({
+  base: './',
   server: { port: 5173, open: true },
   preview: {
     host: true,                                   // 0.0.0.0 바인딩 (컨테이너 외부 접근)
