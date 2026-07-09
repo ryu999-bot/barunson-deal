@@ -12,6 +12,10 @@ export interface Branch {
   name: string;      // 지점명 (예: 강남점)
   kind: BranchKind;
   payee: string;     // 정산주체(사업자) — 직영은 본사로 합산, 가맹은 각자 계좌
+  // 지점별 정산 방법(계좌) — 가맹=지점 계좌 / 직영·미입력=정산주체 계좌
+  settleBank?: string;
+  settleAccount?: string;
+  settleHolder?: string;
 }
 
 export interface UsageEntry {

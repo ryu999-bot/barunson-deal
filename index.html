@@ -395,7 +395,11 @@
               <div class="field"><label>구분</label><select id="brKind"><option value="direct">직영</option><option value="franchise">가맹</option></select></div>
               <div class="field"><label>연락처</label><input id="brPhone" type="text" placeholder="02-000-0000 (선택)" /></div>
               <div class="field"><label>주소</label><input id="brAddr" type="text" placeholder="주소 (선택)" /></div>
+              <div class="field"><label>정산 은행</label><input id="brBank" type="text" placeholder="예: 국민은행 (가맹 지점만)" /></div>
+              <div class="field"><label>정산 계좌번호</label><input id="brAccount" type="text" placeholder="계좌번호 (가맹 지점만)" /></div>
+              <div class="field"><label>예금주</label><input id="brHolder" type="text" placeholder="예금주 (가맹 지점만)" /></div>
             </div>
+            <p class="desc" style="margin-top:var(--sp-2)">정산 계좌는 <b>가맹(개별정산)</b> 지점만 입력하세요. 직영·미입력 시 본사(정산주체) 계좌로 정산됩니다. 실제 정산은 바른 ERP에서 처리됩니다.</p>
             <button class="btn-primary" type="submit" style="max-width:220px;margin-top:var(--sp-4)">지점 등록</button>
           </form>
         </div>

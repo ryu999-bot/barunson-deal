@@ -1,5 +1,5 @@
 import './style.css';
-import type { Coupon, BranchKind } from './types';
+import type { Coupon, BranchKind, Branch } from './types';
 import { VENDOR, BRAND, BRANCHES, branchOf, PAYOUT_DAY, BASE_DATE, todayStr, ymd, won, GOOGLE_CLIENT_ID } from './config';
 import { balanceOf, realStatus, STATUS_META, discPct, refundDue, settleLines, groupByPayee } from './domain';
 import { api } from './api';
@@ -273,9 +273,10 @@ document.querySelectorAll('.nav-item').forEach((b) => ((b as HTMLElement).onclic
 /* ================= 지점 관리 ================= */
 async function renderBranches() {
   const list = await api.listBranches();
+  const acct = (b: Branch) => b.settleAccount ? `${b.settleBank ?? ''} ${b.settleAccount}${b.settleHolder ? ` (${b.settleHolder})` : ''}`.trim() : '<span class="desc">본사 계좌</span>';
   $('branchList').innerHTML = list.length
-    ? `<table class="tbl"><thead><tr><th>지점명</th><th>구분</th><th>정산주체(payee)</th></tr></thead><tbody>${list
-        .map((b) => `<tr><td>${b.name}</td><td>${b.kind === 'franchise' ? '가맹' : '직영'}</td><td>${b.payee}</td></tr>`)
+    ? `<table class="tbl"><thead><tr><th>지점명</th><th>구분</th><th>정산주체(payee)</th><th>정산계좌</th></tr></thead><tbody>${list
+        .map((b) => `<tr><td>${b.name}</td><td>${b.kind === 'franchise' ? '가맹' : '직영'}</td><td>${b.payee}</td><td>${acct(b)}</td></tr>`)
         .join('')}</tbody></table>`
     : `<p class="desc">등록된 지점이 없습니다. 위에서 지점을 등록하세요.</p>`;
 }
@@ -285,11 +286,9 @@ async function renderBranches() {
   const name = g('brName');
   if (!name) { toast('⚠️ 지점명을 입력하세요'); return; }
   const kind = ($('brKind') as HTMLSelectElement).value as BranchKind;
-  await api.addBranch({ name, kind, phone: g('brPhone'), addr: g('brAddr') });
+  await api.addBranch({ name, kind, phone: g('brPhone'), addr: g('brAddr'), settleBank: g('brBank'), settleAccount: g('brAccount'), settleHolder: g('brHolder') });
   toast('✓ 지점을 등록했어요');
-  ($('brName') as HTMLInputElement).value = '';
-  ($('brPhone') as HTMLInputElement).value = '';
-  ($('brAddr') as HTMLInputElement).value = '';
+  ['brName', 'brPhone', 'brAddr', 'brBank', 'brAccount', 'brHolder'].forEach((id) => (($(id) as HTMLInputElement).value = ''));
   initBranchSel();   // 처리 지점 셀렉터 갱신
   renderBranches();
 });

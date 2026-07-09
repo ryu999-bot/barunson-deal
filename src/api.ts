@@ -156,24 +156,28 @@ export const api = {
     return BRANCHES.slice();
   },
 
-  /** 지점 등록 — 정산주체(payee)는 서버가 로그인 업체로 자동 지정 */
-  async addBranch(input: { name: string; kind: BranchKind; phone?: string; addr?: string }): Promise<Branch> {
+  /** 지점 등록 — 정산주체(payee)는 서버가 로그인 업체로 자동 지정. 정산계좌(settle*) = 지점별 정산 방법 */
+  async addBranch(input: { name: string; kind: BranchKind; phone?: string; addr?: string; settleBank?: string; settleAccount?: string; settleHolder?: string }): Promise<Branch> {
     if (USE_API) {
-      // POST /api/Lounge/branches → {branchId}. 정산주체=토큰 스코프 업체 자동.
+      // POST /api/Lounge/branches → {branchId}. 정산주체=토큰 스코프 업체 자동. 정산계좌는 그대로 저장.
       const r = await apiFetch('/Lounge/branches', {
         method: 'POST',
-        body: JSON.stringify({ branchName: input.name, branchKind: input.kind === 'franchise' ? 'FRANCHISE' : 'DIRECT', branchPhone: input.phone, branchAddr: input.addr }),
+        body: JSON.stringify({
+          branchName: input.name, branchKind: input.kind === 'franchise' ? 'FRANCHISE' : 'DIRECT',
+          branchPhone: input.phone, branchAddr: input.addr,
+          settleBank: input.settleBank, settleAccount: input.settleAccount, settleHolder: input.settleHolder,
+        }),
       });
       if (!r.ok) throw new Error('ADD_BRANCH_FAIL');
       const b = await r.json();
-      const branch: Branch = { id: String(b.branchId), name: b.branchName, kind: b.branchKind === 'FRANCHISE' ? 'franchise' : 'direct', payee: VENDOR.name };
+      const branch: Branch = { id: String(b.branchId), name: b.branchName, kind: b.branchKind === 'FRANCHISE' ? 'franchise' : 'direct', payee: VENDOR.name, settleBank: b.settleBank, settleAccount: b.settleAccount, settleHolder: b.settleHolder };
       BRANCHES.push(branch);
       return branch;
     }
     await delay();
     const id = (input.name.replace(/\s+/g, '') || 'br') + '-' + Date.now().toString(36);
     const payee = input.kind === 'franchise' ? `${BRAND} ${input.name}(가맹)` : `(주)${BRAND} 본사`;
-    const branch: Branch = { id, name: input.name, kind: input.kind, payee };
+    const branch: Branch = { id, name: input.name, kind: input.kind, payee, settleBank: input.settleBank, settleAccount: input.settleAccount, settleHolder: input.settleHolder };
     BRANCHES.push(branch);
     return branch;
   },
