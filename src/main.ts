@@ -39,8 +39,12 @@ const branchCell = (c: Coupon): string => {
 let user: User | null = null;
 
 // 계정에 묶인 지점 스코프 — 본사 계정: 직영 지점들 / 가맹 계정: 자기 지점 / 직원: 전체
+// 발급 시 지정된 branchIds 외에, 자기 사업자(payee=vendorName) 소속으로 "지점 관리"에서
+// 새로 등록한 지점도 포함한다(핸드오버: 정산주체 = 토큰 스코프 업체 자동).
 const allowedBranches = () =>
-  user?.role === 'vendor' && user.branchIds?.length ? BRANCHES.filter((b) => user!.branchIds!.includes(b.id)) : BRANCHES;
+  user?.role === 'vendor' && (user.branchIds?.length || user.vendorName)
+    ? BRANCHES.filter((b) => user!.branchIds?.includes(b.id) || b.payee === user!.vendorName)
+    : BRANCHES;
 const allowedIds = () => new Set(allowedBranches().map((b) => b.id));
 
 // ── 사용 범위 규칙: 쿠폰은 "판매 지점을 운영하는 사업자(정산주체)"의 지점에서만 사용 가능.
@@ -271,13 +275,23 @@ async function renderStaffNotices() {
 document.querySelectorAll('.nav-item').forEach((b) => ((b as HTMLElement).onclick = () => showView((b as HTMLElement).dataset.view!)));
 
 /* ================= 지점 관리 ================= */
+const acctLabel = (b: Branch) =>
+  b.settleAccount
+    ? `${b.settleBank ? b.settleBank + ' ' : ''}${b.settleAccount}${b.settleHolder ? ` (${b.settleHolder})` : ''}`
+    : '<span style="color:var(--sub)">정산주체(본사) 계좌</span>';
+
 async function renderBranches() {
-  const list = await api.listBranches();
-  const acct = (b: Branch) => b.settleAccount ? `${b.settleBank ?? ''} ${b.settleAccount}${b.settleHolder ? ` (${b.settleHolder})` : ''}`.trim() : '<span class="desc">본사 계좌</span>';
+  const list = (await api.listBranches()).filter((b) => user?.role !== 'vendor' || allowedIds().has(b.id));
   $('branchList').innerHTML = list.length
-    ? `<table class="tbl"><thead><tr><th>지점명</th><th>구분</th><th>정산주체(payee)</th><th>정산계좌</th></tr></thead><tbody>${list
-        .map((b) => `<tr><td>${b.name}</td><td>${b.kind === 'franchise' ? '가맹' : '직영'}</td><td>${b.payee}</td><td>${acct(b)}</td></tr>`)
-        .join('')}</tbody></table>`
+    ? `<table><thead><tr>
+        <th>지점명</th><th>구분</th><th class="col-hide">연락처</th><th>정산주체</th><th>정산계좌</th>
+        </tr></thead><tbody>${list.map((b) => `<tr>
+          <td><b>${b.name}</b>${b.addr ? `<div style="color:var(--sub);font-size:var(--fs-cap)">${b.addr}</div>` : ''}</td>
+          <td>${b.kind === 'franchise' ? '<span class="badge amount">가맹</span>' : '<span class="badge ok">직영</span>'}</td>
+          <td class="col-hide">${b.phone || '-'}</td>
+          <td>${b.payee}</td>
+          <td>${acctLabel(b)}</td>
+        </tr>`).join('')}</tbody></table>`
     : `<p class="desc">등록된 지점이 없습니다. 위에서 지점을 등록하세요.</p>`;
 }
 (document.getElementById('branchForm') as HTMLFormElement | null)?.addEventListener('submit', async (e) => {
@@ -286,8 +300,16 @@ async function renderBranches() {
   const name = g('brName');
   if (!name) { toast('⚠️ 지점명을 입력하세요'); return; }
   const kind = ($('brKind') as HTMLSelectElement).value as BranchKind;
-  await api.addBranch({ name, kind, phone: g('brPhone'), addr: g('brAddr'), settleBank: g('brBank'), settleAccount: g('brAccount'), settleHolder: g('brHolder') });
-  toast('✓ 지점을 등록했어요');
+  const bank = g('brBank'), account = g('brAccount'), holder = g('brHolder');
+  // 계좌는 셋 다 입력하거나 모두 비워야 함 (부분 입력 방지)
+  if ((bank || account || holder) && !(bank && account && holder)) {
+    toast('⚠️ 정산 계좌는 은행·계좌번호·예금주를 모두 입력하세요');
+    return;
+  }
+  // 정산주체 = 로그인 사업자 (서버의 "토큰 스코프 업체 자동 지정"과 동일 규칙)
+  const payee = user?.vendorName || VENDOR.name;
+  await api.addBranch({ name, kind, payee, phone: g('brPhone'), addr: g('brAddr'), settleBank: bank, settleAccount: account, settleHolder: holder });
+  toast('✓ 지점을 등록했어요 — 처리 지점에서 바로 선택할 수 있습니다');
   ['brName', 'brPhone', 'brAddr', 'brBank', 'brAccount', 'brHolder'].forEach((id) => (($(id) as HTMLInputElement).value = ''));
   initBranchSel();   // 처리 지점 셀렉터 갱신
   renderBranches();
@@ -721,13 +743,19 @@ function renderSettlement() {
 
   // 정산주체별 지급 — 직영점 사용분은 본사 합산, 가맹점 사용분은 각자 지급
   const groups = groupByPayee(nextLines);
+  // 지급 계좌: 해당 정산주체 지점에 등록된 정산계좌(가맹 개별정산), 없으면 업체·정산 정보의 계좌
+  const payeeAcct = (payee: string) => {
+    const b = BRANCHES.find((x) => x.payee === payee && x.settleAccount);
+    return b ? acctLabel(b) : '<span style="color:var(--sub)">업체·정산 정보 등록 계좌</span>';
+  };
   $('payeeSummary').innerHTML = groups.length
     ? `<table><thead><tr>
-        <th>정산주체(사업자)</th><th>구분</th><th>사용 지점</th><th class="num">건수</th><th class="num">${nd} 지급액</th>
+        <th>정산주체(사업자)</th><th>구분</th><th>사용 지점</th><th class="col-hide">지급 계좌</th><th class="num">건수</th><th class="num">${nd} 지급액</th>
         </tr></thead><tbody>${groups.map((g) => `<tr>
           <td><b>${g.payee}</b></td>
           <td>${g.kind === 'direct' ? '<span class="badge ok">직영 · 본사 합산</span>' : '<span class="badge amount">가맹 · 개별 지급</span>'}</td>
           <td>${g.branchNames.join(', ')}</td>
+          <td class="col-hide">${payeeAcct(g.payee)}</td>
           <td class="num">${g.count}건</td>
           <td class="num"><b>${won(g.total)}원</b></td>
         </tr>`).join('')}</tbody></table>`

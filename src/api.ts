@@ -150,14 +150,20 @@ export const api = {
       return (rows || []).map((b: any): Branch => ({
         id: String(b.branchId), name: b.branchName,
         kind: b.branchKind === 'FRANCHISE' ? 'franchise' : 'direct', payee: VENDOR.name,
+        phone: b.phone, addr: b.addr,
+        settleBank: b.settleBank, settleAccount: b.settleAccount, settleHolder: b.settleHolder,
       }));
     }
     await delay();
     return BRANCHES.slice();
   },
 
-  /** 지점 등록 — 정산주체(payee)는 서버가 로그인 업체로 자동 지정. 정산계좌(settle*) = 지점별 정산 방법 */
-  async addBranch(input: { name: string; kind: BranchKind; phone?: string; addr?: string; settleBank?: string; settleAccount?: string; settleHolder?: string }): Promise<Branch> {
+  /**
+   * 지점 등록 — 정산주체(payee)는 서버가 "토큰 스코프의 로그인 업체"로 자동 지정(핸드오버 §2.1).
+   * 목에서는 호출부가 로그인 계정의 사업자명(payee)을 넘겨 같은 규칙을 재현한다.
+   * 정산계좌(settle*) = 지점별 정산 방법(가맹 개별정산용).
+   */
+  async addBranch(input: { name: string; kind: BranchKind; payee: string; phone?: string; addr?: string; settleBank?: string; settleAccount?: string; settleHolder?: string }): Promise<Branch> {
     if (USE_API) {
       // POST /api/Lounge/branches → {branchId}. 정산주체=토큰 스코프 업체 자동. 정산계좌는 그대로 저장.
       const r = await apiFetch('/Lounge/branches', {
@@ -170,14 +176,20 @@ export const api = {
       });
       if (!r.ok) throw new Error('ADD_BRANCH_FAIL');
       const b = await r.json();
-      const branch: Branch = { id: String(b.branchId), name: b.branchName, kind: b.branchKind === 'FRANCHISE' ? 'franchise' : 'direct', payee: VENDOR.name, settleBank: b.settleBank, settleAccount: b.settleAccount, settleHolder: b.settleHolder };
+      const branch: Branch = {
+        id: String(b.branchId), name: b.branchName, kind: b.branchKind === 'FRANCHISE' ? 'franchise' : 'direct',
+        payee: input.payee, phone: input.phone, addr: input.addr,
+        settleBank: b.settleBank ?? input.settleBank, settleAccount: b.settleAccount ?? input.settleAccount, settleHolder: b.settleHolder ?? input.settleHolder,
+      };
       BRANCHES.push(branch);
       return branch;
     }
     await delay();
     const id = (input.name.replace(/\s+/g, '') || 'br') + '-' + Date.now().toString(36);
-    const payee = input.kind === 'franchise' ? `${BRAND} ${input.name}(가맹)` : `(주)${BRAND} 본사`;
-    const branch: Branch = { id, name: input.name, kind: input.kind, payee, settleBank: input.settleBank, settleAccount: input.settleAccount, settleHolder: input.settleHolder };
+    const branch: Branch = {
+      id, name: input.name, kind: input.kind, payee: input.payee, phone: input.phone, addr: input.addr,
+      settleBank: input.settleBank, settleAccount: input.settleAccount, settleHolder: input.settleHolder,
+    };
     BRANCHES.push(branch);
     return branch;
   },

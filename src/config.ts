@@ -9,8 +9,8 @@ export const VENDOR = { name: BRAND, email: 'jungmin.kim@barunn.net' };
 export const BRANCHES: Branch[] = [
   { id: 'gangnam', name: '강남점', kind: 'direct', payee: '(주)더마린 본사' },
   { id: 'hongdae', name: '홍대점', kind: 'direct', payee: '(주)더마린 본사' },
-  { id: 'bundang', name: '분당점', kind: 'franchise', payee: '더마린 분당점(가맹)' },
-  { id: 'seomyeon', name: '부산서면점', kind: 'franchise', payee: '더마린 부산서면점(가맹)' },
+  { id: 'bundang', name: '분당점', kind: 'franchise', payee: '더마린 분당점(가맹)', settleBank: '국민은행', settleAccount: '123401-04-567890', settleHolder: '더마린분당' },
+  { id: 'seomyeon', name: '부산서면점', kind: 'franchise', payee: '더마린 부산서면점(가맹)', settleBank: '부산은행', settleAccount: '101-2202-3303-04', settleHolder: '더마린서면' },
 ];
 export const branchOf = (id?: string): Branch => BRANCHES.find((b) => b.id === id) || BRANCHES[0];
 
