@@ -7,7 +7,8 @@
 //  (함수 시그니처/반환 타입은 그대로 유지)
 // ============================================================
 import type { Coupon, InquiryInput, SmsEntry, Notice, OpsVendorStat, Branch, BranchKind } from './types';
-import { VENDOR, BRAND, BRANCHES, branchOf, todayStr, stamp } from './config';
+import { VENDOR, BRAND, BRANCHES, branchOf, todayStr, stamp,
+  USE_API, API_BASE, LOUNGE_CLIENT_ID, LOUNGE_CLIENT_SECRET, PILOT_COMPANY_SEQ, PILOT_BRANCH_ID } from './config';
 import { balanceOf } from './domain';
 
 // 지점 표기: '더마린클리닉 강남점'
@@ -73,37 +74,119 @@ const OPS: OpsVendorStat[] = [
 // 네트워크 호출 흉내 (연동 시 제거)
 const delay = (ms = 60) => new Promise<void>((r) => setTimeout(r, ms));
 
+// ===== PublicApi 인증/호출 (USE_API=true 일 때만) =====
+let _clientToken: string | null = null;
+let _scopeToken: string | null = null;
+const uuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+// ① 앱 클라이언트 토큰 (thelounge)
+async function clientToken(): Promise<string> {
+  if (_clientToken) return _clientToken;
+  const r = await fetch(`${API_BASE}/Partner/authenticate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId: LOUNGE_CLIENT_ID, clientSecret: LOUNGE_CLIENT_SECRET }),
+  });
+  if (!r.ok) throw new Error('AUTH_FAIL');
+  _clientToken = (await r.json()).token;
+  return _clientToken!;
+}
+// ② 스코프 토큰 (업체/지점) — 자체 로그인 후 발급. 파일럿은 config 값 사용.
+async function scopeToken(): Promise<string> {
+  if (_scopeToken) return _scopeToken;
+  const r = await fetch(`${API_BASE}/Lounge/auth/scope`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await clientToken()}` },
+    body: JSON.stringify({ companySeq: PILOT_COMPANY_SEQ, branchId: PILOT_BRANCH_ID, operatorId: VENDOR.name }),
+  });
+  if (!r.ok) throw new Error('SCOPE_FAIL');
+  _scopeToken = (await r.json()).token;
+  return _scopeToken!;
+}
+// 스코프 토큰 Bearer 부착 fetch
+async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init.headers || {}), Authorization: `Bearer ${await scopeToken()}` },
+  });
+}
+// LoungeVoucherInfo(API) → Coupon(앱)
+function mapVoucher(v: any): Coupon {
+  const type: Coupon['type'] = v.voucherType === 'AMOUNT' ? 'amount' : v.voucherType === 'COUNT' ? 'count' : 'service';
+  return {
+    code: v.code, type, product: v.dealName,
+    name: v.custName || '', phone: v.custPhone || '',
+    buyDate: v.buyDateTime ? String(v.buyDateTime).slice(0, 10) : '',
+    expire: v.expireAt ? String(v.expireAt).slice(0, 10) : '',
+    paid: v.paidPrice, face: v.faceValue ?? undefined, used: v.usedAmount,
+    status: v.status === 'USED' ? 'used' : v.status === 'REFUNDED' ? 'refunded' : 'available',
+    branchId: v.buyBranchId != null ? String(v.buyBranchId) : undefined,
+    usedBranchId: v.status === 'USED' ? (v.buyBranchId != null ? String(v.buyBranchId) : undefined) : undefined,
+  };
+}
+async function refetchCoupon(code: string): Promise<Coupon> {
+  const r = await apiFetch(`/Lounge/vouchers/search?code=${encodeURIComponent(code)}`);
+  const rows = await r.json();
+  if (!Array.isArray(rows) || !rows.length) throw new Error('NOT_FOUND');
+  return mapVoucher(rows[0]);
+}
+
 export const api = {
   /** 발급 쿠폰 전체 조회 */
   async listCoupons(): Promise<Coupon[]> {
+    if (USE_API) {
+      // 발급내역 목록 GET /api/Lounge/vouchers (업체 스코프, PII 마스킹)
+      const r = await apiFetch('/Lounge/vouchers?size=500');
+      const j = await r.json();
+      return (j.items || []).map(mapVoucher);
+    }
     await delay();
-    // 연동(확정): GET /api/Lounge/vouchers/search?code|phone4|name — Bearer 토큰(POST /api/Partner/authenticate)
-    //   서버가 검색·PII 마스킹·업체 스코프 필터 수행. 상세: 바른라운지_API_핸드오버.md
     return COUPONS.slice();
   },
 
   /** 지점 목록 조회 */
   async listBranches(): Promise<Branch[]> {
+    if (USE_API) {
+      const r = await apiFetch('/Lounge/branches');
+      const rows = await r.json();
+      return (rows || []).map((b: any): Branch => ({
+        id: String(b.branchId), name: b.branchName,
+        kind: b.branchKind === 'FRANCHISE' ? 'franchise' : 'direct', payee: VENDOR.name,
+      }));
+    }
     await delay();
-    // 연동(확정): GET /api/Lounge/branches — Bearer 스코프 토큰(POST /api/Lounge/auth/scope).
-    //   응답 [{branchId, branchName, branchKind, phone, addr, useYN}] (업체 스코프). 상세: 바른라운지_API_핸드오버.md
     return BRANCHES.slice();
   },
 
   /** 지점 등록 — 정산주체(payee)는 서버가 로그인 업체로 자동 지정 */
   async addBranch(input: { name: string; kind: BranchKind; phone?: string; addr?: string }): Promise<Branch> {
+    if (USE_API) {
+      // POST /api/Lounge/branches → {branchId}. 정산주체=토큰 스코프 업체 자동.
+      const r = await apiFetch('/Lounge/branches', {
+        method: 'POST',
+        body: JSON.stringify({ branchName: input.name, branchKind: input.kind === 'franchise' ? 'FRANCHISE' : 'DIRECT', branchPhone: input.phone, branchAddr: input.addr }),
+      });
+      if (!r.ok) throw new Error('ADD_BRANCH_FAIL');
+      const b = await r.json();
+      const branch: Branch = { id: String(b.branchId), name: b.branchName, kind: b.branchKind === 'FRANCHISE' ? 'franchise' : 'direct', payee: VENDOR.name };
+      BRANCHES.push(branch);
+      return branch;
+    }
     await delay();
     const id = (input.name.replace(/\s+/g, '') || 'br') + '-' + Date.now().toString(36);
     const payee = input.kind === 'franchise' ? `${BRAND} ${input.name}(가맹)` : `(주)${BRAND} 본사`;
     const branch: Branch = { id, name: input.name, kind: input.kind, payee };
     BRANCHES.push(branch);
-    // 연동(확정): POST /api/Lounge/branches  body {branchName, branchKind, branchPhone, branchAddr}
-    //   → 응답 {branchId}. 이 branchId를 지점 로그인 계정에 매핑. 정산주체=토큰 스코프 업체 자동.
     return branch;
   },
 
   /** 일반 쿠폰 사용처리 — branchId: 처리 지점(정산 귀속) */
   async redeem(code: string, branchId: string): Promise<Coupon> {
+    if (USE_API) {
+      const r = await apiFetch(`/Lounge/vouchers/${encodeURIComponent(code)}/redeem`, {
+        method: 'POST', headers: { 'Idempotency-Key': uuid() }, body: JSON.stringify({ branchId: Number(branchId) }),
+      });
+      if (!r.ok) throw new Error(r.status === 409 ? 'ALREADY_USED' : r.status === 403 ? 'SCOPE' : 'REDEEM_FAIL');
+      return refetchCoupon(code);
+    }
     await delay();
     const c = COUPONS.find((x) => x.code === code);
     if (!c) throw new Error('NOT_FOUND');
@@ -118,6 +201,13 @@ export const api = {
 
   /** 자유이용권 금액 차감 — branchId: 처리 지점(정산 귀속) */
   async deduct(code: string, amount: number, branchId: string): Promise<Coupon> {
+    if (USE_API) {
+      const r = await apiFetch(`/Lounge/vouchers/${encodeURIComponent(code)}/deduct`, {
+        method: 'POST', headers: { 'Idempotency-Key': uuid() }, body: JSON.stringify({ branchId: Number(branchId), amount }),
+      });
+      if (!r.ok) throw new Error(r.status === 409 ? 'ALREADY_USED' : r.status === 422 ? 'OVER_BALANCE' : r.status === 403 ? 'SCOPE' : 'DEDUCT_FAIL');
+      return refetchCoupon(code);
+    }
     await delay();
     const c = COUPONS.find((x) => x.code === code);
     if (!c) throw new Error('NOT_FOUND');
