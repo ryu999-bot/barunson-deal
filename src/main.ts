@@ -1,7 +1,7 @@
 import './style.css';
 import type { Coupon, BranchKind, Branch } from './types';
-import { VENDOR, BRAND, BRANCHES, branchOf, PAYOUT_DAY, BASE_DATE, todayStr, ymd, won, GOOGLE_CLIENT_ID } from './config';
-import { balanceOf, realStatus, STATUS_META, discPct, refundDue, settleLines, groupByPayee } from './domain';
+import { VENDOR, BRAND, BRANCHES, branchOf, PAYOUT_DAY, BASE_DATE, todayStr, ymd, won, GOOGLE_CLIENT_ID, USE_API } from './config';
+import { balanceOf, realStatus, STATUS_META, discPct, refundDue, settleLines, groupByPayee, payoutDate, type SettleLine } from './domain';
 import { api } from './api';
 import { auth, type User } from './auth';
 
@@ -13,6 +13,14 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 // 현재 로드된 쿠폰 캐시 (api에서 갱신)
 let coupons: Coupon[] = [];
 async function reload() { coupons = await api.listCoupons(); }
+// USE_API: 로그인 업체 지점을 API에서 받아 BRANCHES에 반영(서버가 업체로 스코프). 목 모드는 config 유지.
+async function reloadBranches() {
+  if (!USE_API) return;
+  try {
+    const list = await api.listBranches();
+    BRANCHES.splice(0, BRANCHES.length, ...list);
+  } catch { /* 승인 전·토큰 미설정 등 — 목 목록 유지 */ }
+}
 
 // 현재 처리 지점 — 계정의 지점 스코프 내에서만 선택 가능 (enterApp의 initBranchSel에서 설정)
 let branch = BRANCHES[0];
@@ -41,10 +49,12 @@ let user: User | null = null;
 // 계정에 묶인 지점 스코프 — 본사 계정: 직영 지점들 / 가맹 계정: 자기 지점 / 직원: 전체
 // 발급 시 지정된 branchIds 외에, 자기 사업자(payee=vendorName) 소속으로 "지점 관리"에서
 // 새로 등록한 지점도 포함한다(핸드오버: 정산주체 = 토큰 스코프 업체 자동).
-const allowedBranches = () =>
-  user?.role === 'vendor' && (user.branchIds?.length || user.vendorName)
+const allowedBranches = () => {
+  if (USE_API) return BRANCHES; // 실연동: api.listBranches가 이미 로그인 업체로 스코프됨
+  return user?.role === 'vendor' && (user.branchIds?.length || user.vendorName)
     ? BRANCHES.filter((b) => user!.branchIds?.includes(b.id) || b.payee === user!.vendorName)
     : BRANCHES;
+};
 const allowedIds = () => new Set(allowedBranches().map((b) => b.id));
 
 // ── 사용 범위 규칙: 쿠폰은 "판매 지점을 운영하는 사업자(정산주체)"의 지점에서만 사용 가능.
@@ -150,6 +160,7 @@ async function enterApp() {
   // 데이터 로드 전에 사용자 표시부터 갱신 (이전 세션 잔상 방지)
   renderUserBar();
   applyRole();
+  await reloadBranches();   // USE_API: BRANCHES를 API 지점으로 동기화(초기 셀렉터/스코프 정합)
   initBranchSel();
   applyPendingLock();
   await reload();
@@ -824,10 +835,29 @@ function refreshAll() {
 /* ================= Settlement (사용 기준 · 익월 25일) ================= */
 const typeBadgeByType = (t: string) => TYPE_BADGE[t] || TYPE_BADGE.service;
 
-function renderSettlement() {
+// 정산 라인 소스 — 설계: 정산의 진실원천 = 사용원장(bar_shop1). USE_API면 usages API로,
+// 목 모드면 클라 계산(settleLines). 계산·지급은 바른 ERP, 어드민은 조회.
+async function loadSettleLines(): Promise<SettleLine[]> {
+  if (!USE_API) return settleLines(coupons);
+  const page = await api.listUsages({ size: 500 });
+  return page.items
+    .map((u): SettleLine => ({
+      code: u.voucherCode,
+      product: u.dealName,
+      type: u.usageType === 'REDEEM' ? 'service' : u.voucherType === 'COUNT' ? 'count' : 'amount',
+      usedAt: String(u.processedAt).replace('T', ' ').slice(0, 16),
+      usedAmount: u.usageAmount,
+      settle: u.settleAmount,       // 서버가 사용 시점 확정한 정산액(수수료 공제 전)
+      payout: payoutDate(String(u.processedAt)),
+      branchId: String(u.branchId),
+    }))
+    .sort((a, b) => (a.usedAt < b.usedAt ? 1 : -1));
+}
+
+async function renderSettlement() {
   // 정산은 사용처리 지점 귀속 → 계정 스코프 지점의 라인만
   const ids = allowedIds();
-  const lines = settleLines(coupons).filter((l) => ids.has(l.branchId));
+  const lines = (await loadSettleLines()).filter((l) => ids.has(l.branchId));
   const totalSettle = lines.reduce((s, l) => s + l.settle, 0);
   const doneSum = lines.filter((l) => l.payout <= today).reduce((s, l) => s + l.settle, 0);
   const pendingSum = lines.filter((l) => l.payout > today).reduce((s, l) => s + l.settle, 0);
@@ -944,9 +974,9 @@ function download(filename: string, text: string) {
   a.click();
   URL.revokeObjectURL(url);
 }
-function renderStatements() {
+async function renderStatements() {
   const ids = allowedIds();
-  const lines = settleLines(coupons).filter((l) => ids.has(l.branchId));
+  const lines = (await loadSettleLines()).filter((l) => ids.has(l.branchId));
   type Item = { usedAt: string; code: string; product: string; branch: string; usedAmount: number; settle: number };
   type Stmt = { key: string; date: string; payee: string; kind: 'direct' | 'franchise'; total: number; usolMonth: string; items: Item[] };
   // 명세서는 지급 단위 = (지급일 × 정산주체) — 직영은 본사 1건 합산, 가맹은 각자 1건

@@ -144,6 +144,7 @@ export interface UsageRow {
   usageId: number;
   voucherCode: string;
   dealName: string;
+  voucherType: string;      // 딜 유형 SERVICE / AMOUNT / COUNT
   usageType: 'REDEEM' | 'DEDUCT';
   usageAmount: number;      // 금액형=원 / 횟수형=회 / 일반형=판매가
   settleAmount: number;     // 사용 시점 확정 정산액(수수료 공제 전)
@@ -303,13 +304,13 @@ export const api = {
     for (const c of COUPONS) {
       if (c.type === 'service') {
         if (c.status === 'used' && c.usedAt) {
-          rows.push({ usageId: uid++, voucherCode: c.code, dealName: c.product, usageType: 'REDEEM',
+          rows.push({ usageId: uid++, voucherCode: c.code, dealName: c.product, voucherType: 'SERVICE', usageType: 'REDEEM',
             usageAmount: c.paid, settleAmount: mockSettle(c, c.paid),
             branchId: 0, branchName: c.usedBy || branchName(c.usedBranchId), processedAt: c.usedAt, custName: c.name });
         }
       } else {
         for (const h of (c.history || [])) {
-          rows.push({ usageId: uid++, voucherCode: c.code, dealName: c.product, usageType: 'DEDUCT',
+          rows.push({ usageId: uid++, voucherCode: c.code, dealName: c.product, voucherType: c.type === 'count' ? 'COUNT' : 'AMOUNT', usageType: 'DEDUCT',
             usageAmount: h.amount, settleAmount: mockSettle(c, h.amount),
             branchId: 0, branchName: branchName(h.branchId), processedAt: h.date, custName: c.name });
         }
