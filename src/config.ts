@@ -21,15 +21,23 @@ export const branchOf = (id?: string): Branch => BRANCHES.find((b) => b.id === i
 export const GOOGLE_CLIENT_ID = '';
 
 // ===== 바른손카드 PublicApi 연동 =====
-// USE_API=true 로 켜면 목(mock) 대신 실제 PublicApi(LoungeController)를 호출한다.
+// USE_API=true 면 목(mock) 대신 실제 PublicApi(LoungeController)를 호출한다.
 // ⚠️ 순수 프론트엔드라 ClientSecret이 브라우저에 노출된다 → dev/데모 한정.
 //    운영에서는 라운지 앱 백엔드가 thelounge 인증·스코프 토큰 발급을 대행해야 함(핸드오버 §1).
-export const USE_API = false;
+//
+// [dev 실연동 테스트 켜기] — 시크릿을 소스에 커밋하지 않기 위해 localStorage로 주입한다.
+//   브라우저 콘솔에서:
+//     localStorage.setItem('LOUNGE_USE_API','true')      // 실연동 ON (기본 OFF=목)
+//     localStorage.setItem('LOUNGE_SECRET','<dev 시크릿>') // thelounge ClientSecret (dev)
+//     localStorage.setItem('LOUNGE_COMPANY_SEQ','8433')   // (선택) 파일럿 업체, 기본 8433
+//   설정 후 새로고침. 기본값은 목(mock)이라 미설정 시 개발자 환경은 그대로 동작.
+const ls = (k: string): string | null => (typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null);
+export const USE_API = ls('LOUNGE_USE_API') === 'true';
 export const API_BASE = 'https://dev-api.barunsoncard.com/api'; // dev PublicApi (운영: https://api.barunsoncard.com/api)
 export const LOUNGE_CLIENT_ID = 'thelounge';
-export const LOUNGE_CLIENT_SECRET = ''; // dev 시크릿(별도 전달) — 운영 프론트에 넣지 말 것
-export const PILOT_COMPANY_SEQ = 0;     // 로그인 업체 COMPANY_SEQ (제휴사관리 등록값)
-export const PILOT_BRANCH_ID: number | null = null; // 지점 계정이면 지정, 업체 계정이면 null
+export const LOUNGE_CLIENT_SECRET = ls('LOUNGE_SECRET') || ''; // localStorage 주입(미커밋) — 운영 프론트에 넣지 말 것
+export const PILOT_COMPANY_SEQ = Number(ls('LOUNGE_COMPANY_SEQ')) || 8433; // 파일럿 업체(바른라운지 파일럿) COMPANY_SEQ
+export const PILOT_BRANCH_ID: number | null = ls('LOUNGE_BRANCH_ID') ? Number(ls('LOUNGE_BRANCH_ID')) : null; // 지점 계정이면 지정
 
 // 정산: 매월 1일~말일 사용분을 익월 PAYOUT_DAY일에 지급
 export const PAYOUT_DAY = 25;
