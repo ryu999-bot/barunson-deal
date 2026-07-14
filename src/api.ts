@@ -5,6 +5,16 @@
 //  바른손카드 정식 사이트와 연동할 때는 각 함수 내부의
 //  목 처리 부분을 fetch('/api/...') 호출로 바꾸기만 하면 됩니다.
 //  (함수 시그니처/반환 타입은 그대로 유지)
+//
+//  [2026-07-13 신설 API — 정산·사용 내역 데이터 소스]
+//  GET /api/Lounge/usages?from&to&branchId&page&size
+//   · 기간별 사용/차감 원장. 응답: usageId, voucherCode, dealName,
+//     usageType(REDEEM/DEDUCT), usageAmount, settleAmount(사용 시점 확정 정산액),
+//     branchId/branchName, processedAt, custName(마스킹)
+//     + 집계 total / totalSettle(기간 정산 예정 기준액) / totalUsage
+//   · 스코프: 토큰 업체 기준(지점 계정은 자기 처리분 자동 필터)
+//   → USE_API 연동 시 정산 화면·판매현황 사용 내역의 클라 계산
+//     (domain.settleLines)을 이 API 조회로 대체할 것.
 // ============================================================
 import type { Coupon, InquiryInput, SmsEntry, Notice, OpsVendorStat, Branch, BranchKind } from './types';
 import { VENDOR, BRAND, BRANCHES, branchOf, todayStr, stamp,

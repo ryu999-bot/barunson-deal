@@ -1,7 +1,7 @@
 # 바른라운지 업체 관리자 — 기술 PRD (Technical PRD)
 
 - **제품명:** 바른라운지 업체 관리자 (Partner Admin)
-- **운영사:** (주)바른손카드
+- **운영사(계약 주체):** (주)바른컴퍼니 — 2026-07-13 법인명 확정 (바른손카드 = 모기업/브랜드 표기)
 - **문서 버전:** v0.2 (donald-duck 접근·스택 확정 반영)
 - **기준일:** 2026-07-07
 - **자매 문서:** [기능_PRD.md](기능_PRD.md) · [연동_명세_초안_20260707.md](연동_명세_초안_20260707.md) · [계약서_수정안_20260707.md](계약서_수정안_20260707.md)
@@ -102,10 +102,11 @@ PayeeGroup { payee, kind, branchNames, count, total }  // 정산주체별 합산
 | `api.redeem(code,branchId)` | `POST /api/Lounge/vouchers/{code}/redeem` (**Idempotency-Key 필수**, 409=이미사용) |
 | `api.deduct(code,amount,branchId)` | `POST /api/Lounge/vouchers/{code}/deduct` (금액형=원/횟수형=회, 422=잔여초과) |
 | (신규) 지점 관리 F-13 | `POST/GET/PUT /api/Lounge/branches` — `config.BRANCHES` 하드코딩 대체 |
+| `settleLines`/정산 화면·사용 내역 | ✅ **`GET /api/Lounge/usages?from&to&branchId&page&size`** (2026-07-13 신설) — settleAmount(사용 시점 확정)·totalSettle(기간 집계) 포함, 지점 계정 자동 필터. 클라 정산 계산을 이 API 조회로 대체 |
 | `api.sendSms()` | **제거** — 사용/차감 성공 시 bar_shop1 서버가 자동 발송 |
 | `auth.*` (계정 발급/회수/로그인) | **어드민 자체 백엔드** (bar API 범위 아님 — M1 NestJS에서 구현) |
 | `api.getOpsStats()`·공지·문의 | 어드민 자체 백엔드 (M1) |
-| 정산 산출/명세 | **미확정** — 사용 원장 조회 API 또는 ERP 조회 필요 (연동_명세 §6-1·2) |
+| 수수료 공제·지급 상태(HOLD 포함)·명세 확정 | ERP 소관 — 조회 API 여부 미확정 (연동_명세 §6-2) |
 | 환불 반영 | **미확정** — 웹훅/폴링 미제공, 조회 시 REFUNDED로만 확인 (연동_명세 §6-5) |
 
 ## 5. 외부 연동
