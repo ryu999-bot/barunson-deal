@@ -139,6 +139,35 @@ async function refetchCoupon(code: string): Promise<Coupon> {
   return mapVoucher(rows[0]);
 }
 
+// 사용/차감 원장 (GET /api/Lounge/usages 응답). 정산 화면·판매현황 사용 내역 데이터 소스.
+export interface UsageRow {
+  usageId: number;
+  voucherCode: string;
+  dealName: string;
+  usageType: 'REDEEM' | 'DEDUCT';
+  usageAmount: number;      // 금액형=원 / 횟수형=회 / 일반형=판매가
+  settleAmount: number;     // 사용 시점 확정 정산액(수수료 공제 전)
+  branchId: number;
+  branchName?: string;
+  processedAt: string;
+  custName?: string;        // 마스킹
+}
+export interface UsagePage {
+  total: number;
+  page: number;
+  size: number;
+  totalSettle: number;      // 기간 정산 예정 기준액
+  totalUsage: number;
+  items: UsageRow[];
+}
+
+// 목 정산액: 일반형=전액, 금액/횟수형=차감 비율(amount×paid÷face)
+function mockSettle(c: Coupon, amount: number): number {
+  if (c.type === 'service') return c.paid;
+  const face = c.face || 1;
+  return Math.round(amount * c.paid / face);
+}
+
 export const api = {
   /** 발급 쿠폰 전체 조회 */
   async listCoupons(): Promise<Coupon[]> {
@@ -248,6 +277,55 @@ export const api = {
     // 연동(확정): POST /api/Lounge/vouchers/{code}/deduct  body {branchId, amount}
     //   금액형 amount=원, 횟수형 amount=회. Idempotency-Key 필수. 422=잔여 초과. 응답 {usageId, balance, status}
     return c;
+  },
+
+  /**
+   * 사용/차감 원장 조회 (기간별) — 정산 화면(F-05/F-07)·판매현황 사용 내역(F-03) 데이터 소스.
+   * 연동: GET /api/Lounge/usages?from&to&branchId&page&size (집계 totalSettle 포함, 업체 스코프)
+   * 정산 예정액 = 응답 totalSettle. 목에서는 COUPONS의 사용/차감 이력에서 원장을 재구성한다.
+   */
+  async listUsages(opts: { from?: string; to?: string; branchId?: string; page?: number; size?: number } = {}): Promise<UsagePage> {
+    if (USE_API) {
+      const q = new URLSearchParams();
+      if (opts.from) q.set('from', opts.from);
+      if (opts.to) q.set('to', opts.to);
+      if (opts.branchId) q.set('branchId', opts.branchId);
+      q.set('page', String(opts.page ?? 1));
+      q.set('size', String(opts.size ?? 200));
+      const r = await apiFetch(`/Lounge/usages?${q.toString()}`);
+      if (!r.ok) throw new Error(r.status === 403 ? 'SCOPE' : 'USAGES_FAIL');
+      return await r.json();
+    }
+    await delay();
+    // 목: 쿠폰 이력에서 원장 재구성 (일반형=사용처리 1건 / 금액·횟수형=차감 이력별 1건)
+    let uid = 1;
+    const rows: UsageRow[] = [];
+    for (const c of COUPONS) {
+      if (c.type === 'service') {
+        if (c.status === 'used' && c.usedAt) {
+          rows.push({ usageId: uid++, voucherCode: c.code, dealName: c.product, usageType: 'REDEEM',
+            usageAmount: c.paid, settleAmount: mockSettle(c, c.paid),
+            branchId: 0, branchName: c.usedBy || branchName(c.usedBranchId), processedAt: c.usedAt, custName: c.name });
+        }
+      } else {
+        for (const h of (c.history || [])) {
+          rows.push({ usageId: uid++, voucherCode: c.code, dealName: c.product, usageType: 'DEDUCT',
+            usageAmount: h.amount, settleAmount: mockSettle(c, h.amount),
+            branchId: 0, branchName: branchName(h.branchId), processedAt: h.date, custName: c.name });
+        }
+      }
+    }
+    let items = rows;
+    if (opts.from) items = items.filter((r) => r.processedAt.slice(0, 10) >= opts.from!);
+    if (opts.to) items = items.filter((r) => r.processedAt.slice(0, 10) <= opts.to!);
+    if (opts.branchId) items = items.filter((r) => r.branchName === branchName(opts.branchId));
+    items.sort((a, b) => (a.processedAt < b.processedAt ? 1 : -1));
+    return {
+      total: items.length, page: 1, size: items.length,
+      totalSettle: items.reduce((s, r) => s + r.settleAmount, 0),
+      totalUsage: items.reduce((s, r) => s + r.usageAmount, 0),
+      items,
+    };
   },
 
   /**
