@@ -112,6 +112,10 @@ $('authForm').onsubmit = async (e) => {
       if (pw !== pw2) { toast('⚠️ 비밀번호가 일치하지 않아요'); return; }
       if (!certFile) { toast('⚠️ 사업자등록증을 첨부하세요'); return; }
       user = await auth.signup({ email, name, pw, vendorName, bizNo, phone, certName: certFile.name });
+    } else if (USE_API) {
+      // 실연동: 본사(COMPANY) login_id/pw로 로그인 → PublicApi 검증 → 스코프 토큰(그 업체)
+      const c = await api.companyLogin(email, pw);
+      user = { email, name: c.companyName, provider: 'email', role: 'vendor', vendorName: c.companyName, approved: true };
     } else {
       user = await auth.login(email, pw);
     }

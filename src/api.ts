@@ -170,6 +170,23 @@ function mockSettle(c: Coupon, amount: number): number {
 }
 
 export const api = {
+  /**
+   * 본사(COMPANY) 로그인 — 바른손웹 등록 제휴사 login_id/pw로 로그인.
+   * PublicApi가 검증 후 그 CompanySeq로 스코프 토큰 발급 → 이후 /Lounge/* 호출에 사용.
+   * (USE_API 전용. 목 모드는 auth.ts의 이메일 계정 사용)
+   */
+  async companyLogin(loginId: string, password: string): Promise<{ companySeq: number; companyName: string }> {
+    const r = await fetch(`${API_BASE}/Lounge/company-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await clientToken()}` },
+      body: JSON.stringify({ loginId, password }),
+    });
+    if (!r.ok) throw new Error(r.status === 401 ? 'INVALID' : 'LOGIN_FAIL');
+    const j = await r.json();
+    _scopeToken = j.token;   // 본사 스코프 토큰 — 이후 apiFetch가 이 토큰 사용
+    return { companySeq: j.companySeq, companyName: j.companyName };
+  },
+
   /** 발급 쿠폰 전체 조회 */
   async listCoupons(): Promise<Coupon[]> {
     if (USE_API) {
