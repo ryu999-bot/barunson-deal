@@ -25,14 +25,14 @@ export const GOOGLE_CLIENT_ID = '';
 // ⚠️ 순수 프론트엔드라 ClientSecret이 브라우저에 노출된다 → dev/데모 한정.
 //    운영에서는 라운지 앱 백엔드가 thelounge 인증·스코프 토큰 발급을 대행해야 함(핸드오버 §1).
 //
-// [dev 실연동 테스트 켜기] — 시크릿을 소스에 커밋하지 않기 위해 localStorage로 주입한다.
+// [기본값: dev 실연동 ON] — dev PublicApi(dev DB) 를 기본으로 조회한다.
+//   시크릿(LOUNGE_SECRET)은 보안상 소스에 커밋하지 않고 localStorage 로 주입한다.
 //   브라우저 콘솔에서:
-//     localStorage.setItem('LOUNGE_USE_API','true')      // 실연동 ON (기본 OFF=목)
-//     localStorage.setItem('LOUNGE_SECRET','<dev 시크릿>') // thelounge ClientSecret (dev)
-//     localStorage.setItem('LOUNGE_COMPANY_SEQ','8433')   // (선택) 파일럿 업체, 기본 8433
-//   설정 후 새로고침. 기본값은 목(mock)이라 미설정 시 개발자 환경은 그대로 동작.
+//     localStorage.setItem('LOUNGE_SECRET','<dev 시크릿>')   // thelounge ClientSecret (dev) — 실연동에 필수
+//     localStorage.setItem('LOUNGE_COMPANY_SEQ','8433')     // (선택) 파일럿 업체, 기본 8433
+//   목(mock) 데모 데이터로 되돌리려면: localStorage.setItem('LOUNGE_USE_API','false') 후 새로고침.
 const ls = (k: string): string | null => (typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null);
-export const USE_API = ls('LOUNGE_USE_API') === 'true';
+export const USE_API = ls('LOUNGE_USE_API') !== 'false'; // 기본 true(dev 실연동). 'false' 로 명시하면 목(mock)
 export const API_BASE = 'https://dev-api.barunsoncard.com/api'; // dev PublicApi (운영: https://api.barunsoncard.com/api)
 export const LOUNGE_CLIENT_ID = 'thelounge';
 export const LOUNGE_CLIENT_SECRET = ls('LOUNGE_SECRET') || ''; // localStorage 주입(미커밋) — 운영 프론트에 넣지 말 것
