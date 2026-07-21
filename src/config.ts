@@ -20,23 +20,25 @@ export const branchOf = (id?: string): Branch => BRANCHES.find((b) => b.id === i
 // 비워두면 'Google로 계속하기'가 데모 계정으로 동작합니다.
 export const GOOGLE_CLIENT_ID = '';
 
-// ===== 바른손카드 PublicApi 연동 =====
-// USE_API=true 면 목(mock) 대신 실제 PublicApi(LoungeController)를 호출한다.
-// ⚠️ 순수 프론트엔드라 ClientSecret이 브라우저에 노출된다 → dev/데모 한정.
-//    운영에서는 라운지 앱 백엔드가 thelounge 인증·스코프 토큰 발급을 대행해야 함(핸드오버 §1).
+// ===== 바른손카드 PublicApi 연동 (환경별 자동 분기) =====
+// API_BASE 는 Vite 모드에 따라 .env.development / .env.production 의 VITE_API_BASE 를 사용한다.
+//   · npm run dev            → development → dev-api.barunsoncard.com
+//   · npm run build (운영)    → production  → api.barunsoncard.com
+//   · dev 컨테이너 빌드        → `vite build --mode development` (npm run build:dev)
+// VITE_API_BASE 를 명시하면 그 값이 최우선.
 //
-// [기본값: dev 실연동 ON] — dev PublicApi(dev DB) 를 기본으로 조회한다.
-//   시크릿(LOUNGE_SECRET)은 보안상 소스에 커밋하지 않고 localStorage 로 주입한다.
-//   브라우저 콘솔에서:
-//     localStorage.setItem('LOUNGE_SECRET','<dev 시크릿>')   // thelounge ClientSecret (dev) — 실연동에 필수
-//     localStorage.setItem('LOUNGE_COMPANY_SEQ','8433')     // (선택) 파일럿 업체, 기본 8433
-//   목(mock) 데모 데이터로 되돌리려면: localStorage.setItem('LOUNGE_USE_API','false') 후 새로고침.
+// ⚠️ 시크릿(ClientSecret)은 소스/커밋 env 에 넣지 말 것 — 브라우저 번들에 노출됨.
+//    dev 테스트: 브라우저 localStorage('LOUNGE_SECRET') 주입.
+//    운영: 라운지 백엔드(BFF)가 thelounge 인증·스코프 토큰 발급을 대행하는 구조 권장(핸드오버 §1).
+//    (부득이 빌드 주입 시에만 VITE_LOUNGE_SECRET 사용 — 노출 감수)
 const ls = (k: string): string | null => (typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null);
-export const USE_API = ls('LOUNGE_USE_API') !== 'false'; // 기본 true(dev 실연동). 'false' 로 명시하면 목(mock)
-export const API_BASE = 'https://dev-api.barunsoncard.com/api'; // dev PublicApi (운영: https://api.barunsoncard.com/api)
+export const API_BASE = (import.meta.env.VITE_API_BASE as string)
+  || (import.meta.env.PROD ? 'https://api.barunsoncard.com/api' : 'https://dev-api.barunsoncard.com/api');
 export const LOUNGE_CLIENT_ID = 'thelounge';
-export const LOUNGE_CLIENT_SECRET = ls('LOUNGE_SECRET') || ''; // localStorage 주입(미커밋) — 운영 프론트에 넣지 말 것
-export const PILOT_COMPANY_SEQ = Number(ls('LOUNGE_COMPANY_SEQ')) || 8433; // 파일럿 업체(바른라운지 파일럿) COMPANY_SEQ
+export const LOUNGE_CLIENT_SECRET = (import.meta.env.VITE_LOUNGE_SECRET as string) || ls('LOUNGE_SECRET') || '';
+// 실연동 전용(목업 제거). main.ts 의 잔존 목 분기 호환용 상수 — 항상 실 API 경로.
+export const USE_API = true;
+export const PILOT_COMPANY_SEQ = Number(ls('LOUNGE_COMPANY_SEQ')) || 8433; // 파일럿 업체(바른라운지 파일럿) COMPANY_SEQ — 운영은 companyLogin 스코프 사용
 export const PILOT_BRANCH_ID: number | null = ls('LOUNGE_BRANCH_ID') ? Number(ls('LOUNGE_BRANCH_ID')) : null; // 지점 계정이면 지정
 
 // 정산: 매월 1일~말일 사용분을 익월 PAYOUT_DAY일에 지급
