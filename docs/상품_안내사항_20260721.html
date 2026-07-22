@@ -1,0 +1,114 @@
+<title>바른라운지 상품 안내사항 (딜 페이지 하단)</title>
+<style>
+  :root{
+    --ink:#333; --soft:#666; --sub:#8a8a8a; --line:#e5e5e5; --line-dark:#d9d9d9;
+    --bg:#fff; --accent:#9D4B63;
+  }
+  *{box-sizing:border-box}
+  html{background:#f4f4f4}
+  body{
+    margin:0; padding:40px 16px 80px;
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Segoe UI",sans-serif;
+    color:var(--ink); font-size:13px; line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+  }
+  .preview-label{
+    max-width:960px; margin:0 auto 10px; font-size:12px; color:#999; letter-spacing:.06em;
+  }
+  .frame{
+    max-width:960px; margin:0 auto; background:var(--bg);
+    border:1px solid var(--line); padding:36px 40px 44px;
+  }
+
+  h1{
+    margin:0 0 24px; font-size:17px; font-weight:700; color:#222;
+    padding-bottom:14px; border-bottom:2px solid #222;
+  }
+  section{padding:20px 0 22px; border-bottom:1px solid var(--line)}
+  section:last-of-type{border-bottom:none; padding-bottom:0}
+  h2{margin:0 0 12px; font-size:14px; font-weight:700; color:#222}
+  ul{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:7px}
+  li{
+    position:relative; padding-left:12px; color:var(--soft); font-size:13px;
+  }
+  li::before{content:"·"; position:absolute; left:0; color:var(--sub); font-weight:700}
+  li b{color:#444; font-weight:600}
+  li.hl{color:#b0475f}
+  li.hl b{color:#b0475f}
+
+  .refund-table{
+    margin:10px 0 4px; border-top:1px solid var(--line-dark);
+  }
+  .refund-row{
+    display:flex; gap:16px; padding:9px 2px; border-bottom:1px solid var(--line);
+    font-size:13px;
+  }
+  .refund-row .k{flex:0 0 300px; color:var(--soft)}
+  .refund-row .v{color:#333; font-weight:600}
+  .fineprint{margin-top:10px; font-size:12px; color:var(--sub); line-height:1.65}
+  @media (max-width:640px){
+    .frame{padding:24px 18px 30px}
+    .refund-row{flex-direction:column; gap:2px}
+    .refund-row .k{flex:auto}
+  }
+</style>
+
+<div class="preview-label">바른라운지 이용권 상품 상세 하단 — 안내사항 영역 (바른손카드 사이트 형식)</div>
+<div class="frame">
+
+  <h1>안내사항</h1>
+
+  <section>
+    <h2>필수 확인 사항</h2>
+    <ul>
+      <li>본 상품은 <b>이용권(모바일 쿠폰)</b> 상품으로, 결제 완료 시 즉시 자동 발급되며 <b>마이페이지 &gt; 쿠폰함</b>에서 쿠폰번호를 확인할 수 있습니다. (별도 배송 없음)</li>
+      <li>이용권은 상품에 표시된 <b>유효기간 내</b> 사용할 수 있으며, 유효기간은 구매일(결제일)을 기준으로 합니다.</li>
+      <li><b>사용 가능 지점은 상품 페이지에 표시된 지점</b>입니다. 동일 사업자가 운영하는 직영 지점 간에는 교차 사용이 가능하나, 가맹점에서 판매된 이용권은 해당 가맹점에서만 사용할 수 있습니다.</li>
+      <li class="hl"><b>방문 전 지점 예약은 필수입니다.</b> 반드시 사전 예약 후 방문해 주세요. (지점 연락처는 상품 페이지 참조)</li>
+      <li>이용권 유형에 따라 사용 방식이 다릅니다 — <b>일반형</b>: 1회 사용으로 소멸 / <b>금액형</b>: 표시 금액 한도 내 차감 / <b>횟수형</b>: 총 회수 한도 내 차감. 잔액·잔여 회수가 0이 되면 소멸됩니다.</li>
+      <li><b>유효기간은 연장되지 않습니다.</b> 만료 <b>30일 전 알림</b>을 보내드리니 기간 내 사용해 주시고, 사용이 어려운 경우 환불을 신청해 주세요. (만료 후에도 환급 가능 — 아래 취소/환불 규정 참조)</li>
+      <li>대가 없는 양도는 가능하나 <b>영리 목적의 재판매는 금지</b>되며, 위·변조 또는 부정 취득한 이용권은 사용이 거부될 수 있습니다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>사용 방법</h2>
+    <ul>
+      <li>매장 방문 시 <b>쿠폰번호 또는 구매자 이름·연락처</b>를 제시하면 지점에서 확인 후 사용 처리합니다.</li>
+      <li>사용·차감이 완료되면 구매자 연락처로 사용 내역(사용 금액·잔액 등)이 통지됩니다.</li>
+      <li>이미 사용 처리된 내역은 취소·복원되지 않으니, 시술·서비스 제공 내용을 현장에서 확인해 주세요.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>취소 / 환불 규정</h2>
+    <ul>
+      <li>본 상품의 환불은 「전자상거래 등에서의 소비자보호에 관한 법률」 및 공정거래위원회 「신유형 상품권 표준약관」을 따릅니다.</li>
+      <li class="hl"><b>환불은 자동으로 처리되지 않으며, 고객님이 직접 신청하신 경우에 한해 처리됩니다.</b> 미사용 상태로 유효기간이 지나도 자동 환불되지 않으니 반드시 신청해 주세요.</li>
+      <li class="hl"><b>환불은 바른라운지가 직접 처리합니다</b> — 지점(매장)에 환불을 요청하실 수 없으며, 마이페이지 &gt; 쿠폰함에서 신청해 주세요.</li>
+      <li>환불 금액은 표시 정가·액면금액이 아닌 <b>실제 결제 금액</b>을 기준으로 합니다.</li>
+    </ul>
+    <div class="refund-table">
+      <div class="refund-row"><span class="k">결제일로부터 7일 이내 · 미사용</span><span class="v">결제금액 100% 환불 (청약철회)</span></div>
+      <div class="refund-row"><span class="k">유효기간 내 · 미사용</span><span class="v">결제금액 100% 환불</span></div>
+      <div class="refund-row"><span class="k">일부 사용 후 환불</span><span class="v">잔여분을 결제금액 비례 환불 — 결제금액 × (잔여 금액/회수 ÷ 총 금액/회수)</span></div>
+      <div class="refund-row"><span class="k">유효기간 경과 후 (구매일로부터 5년 이내 신청 시)</span><span class="v">잔여분 상당 결제금액의 90% 환급</span></div>
+      <div class="refund-row"><span class="k">표시·광고와 다른 경우, 지점 휴·폐업 등 판매자 귀책</span><span class="v">결제금액 100% 환불</span></div>
+    </div>
+    <div class="fineprint">
+      · 금액형 이용권의 잔액 환불은 총 액면금액의 60%(결제금액 1만원 이하 상품은 80%) 이상 사용한 때부터 청구할 수 있습니다.<br>
+      · 이미 사용 처리된 부분은 환불 대상이 아닙니다.<br>
+      · 관련 법령 및 소비자분쟁해결기준에서 달리 정하는 경우 그에 따릅니다.
+    </div>
+  </section>
+
+  <section>
+    <h2>판매자 정보 및 중개 고지</h2>
+    <ul>
+      <li>(주)바른컴퍼니는 통신판매중개자로서 거래의 당사자가 아니며, <b>상품·서비스의 제공 및 품질에 관한 책임은 상품 페이지에 표시된 판매 업체</b>에 있습니다.</li>
+      <li>다만 이용권 판매 대금의 수령과 환불은 (주)바른컴퍼니가 직접 처리합니다.</li>
+      <li>판매 업체의 상호·대표자·사업자등록번호·소재지·연락처는 상품 페이지의 판매자 정보에서 확인할 수 있습니다.</li>
+    </ul>
+  </section>
+
+</div>
